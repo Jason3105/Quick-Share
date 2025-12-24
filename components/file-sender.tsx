@@ -46,10 +46,25 @@ export function FileSender({ onBack }: FileSenderProps) {
 
   // Send file list when connection is established AND data channel is open - only once
   useEffect(() => {
-    if (isConnected && files.length > 0 && dataChannel?.readyState === "open" && !hasSharedFileList.current) {
-      console.log("🔗 Connection ready - sending file list");
-      sendFileList(files);
-      hasSharedFileList.current = true;
+    if (isConnected && files.length > 0 && dataChannel && !hasSharedFileList.current) {
+      // Add small delay to ensure data channel is fully ready
+      const timer = setTimeout(() => {
+        if (dataChannel.readyState === "open") {
+          console.log("🔗 Connection ready - sending file list");
+          sendFileList(files);
+          hasSharedFileList.current = true;
+        } else {
+          console.log("⏳ Data channel not open yet, waiting...");
+          // Listen for open event
+          dataChannel.addEventListener("open", () => {
+            console.log("🔗 Data channel now open - sending file list");
+            sendFileList(files);
+            hasSharedFileList.current = true;
+          }, { once: true });
+        }
+      }, 200);
+      
+      return () => clearTimeout(timer);
     }
   }, [isConnected, files, sendFileList, dataChannel]);
 

@@ -400,6 +400,7 @@ export function useWebRTC() {
         channel.onopen = () => {
           console.log("✅ Data channel opened");
           setIsConnected(true);
+          setConnectionState("Connected - Ready to receive");
         };
 
         channel.onclose = () => {
@@ -410,6 +411,7 @@ export function useWebRTC() {
         channel.onmessage = (e) => {
           if (typeof e.data === "string") {
             const metadata = JSON.parse(e.data);
+            console.log("📨 Received message type:", metadata.type);
             if (metadata.type === "file-list") {
               console.log("📋 Received file list:", metadata.files);
               setAvailableFiles(metadata.files);
@@ -453,6 +455,7 @@ export function useWebRTC() {
         };
 
         setDataChannel(channel);
+        console.log("✅ Data channel stored in state");
       };
 
       peerConnectionRef.current = pc;
