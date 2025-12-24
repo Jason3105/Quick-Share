@@ -255,7 +255,7 @@ export function FileReceiver({ onBack, initialRoomCode = "" }: FileReceiverProps
           </div>
         )}
 
-        {isConnected && currentFileName === "" && receivedFiles.length === 0 && (
+        {isConnected && currentFileName === "" && receivedFiles.length === 0 && progress === 0 && (
           <div className="space-y-6">
             <div className="relative overflow-hidden bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950 dark:to-emerald-950 p-6 sm:p-8 rounded-xl border-2 border-green-500 dark:border-green-600 shadow-xl">
               <div className="absolute top-0 right-0 w-32 h-32 bg-green-400 dark:bg-green-600 rounded-full blur-3xl opacity-20"></div>
@@ -280,53 +280,49 @@ export function FileReceiver({ onBack, initialRoomCode = "" }: FileReceiverProps
           </div>
         )}
 
-        {isConnected && downloadingFileIndex !== null && (
+        {isConnected && (currentFileName !== "" || progress > 0) && progress < 100 && (
           <div className="space-y-6">
-            <div className="relative overflow-hidden bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950 dark:to-emerald-950 p-6 sm:p-8 rounded-xl border-2 border-green-500 dark:border-green-600 shadow-xl">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-green-400 dark:bg-green-600 rounded-full blur-3xl opacity-20"></div>
+            <div className="relative overflow-hidden bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950 dark:to-indigo-950 p-6 sm:p-8 rounded-xl border-2 border-blue-500 dark:border-blue-600 shadow-xl">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-blue-400 dark:bg-blue-600 rounded-full blur-3xl opacity-20"></div>
               <div className="relative text-center">
                 <div className="inline-block mb-4">
-                  <div className="h-16 w-16 sm:h-20 sm:w-20 rounded-full bg-green-500 dark:bg-green-600 flex items-center justify-center shadow-lg mx-auto">
-                    <CheckCircle2 className="h-8 w-8 sm:h-10 sm:w-10 text-white" />
+                  <div className="h-16 w-16 sm:h-20 sm:w-20 rounded-full bg-blue-500 dark:bg-blue-600 flex items-center justify-center shadow-lg mx-auto">
+                    <Loader2 className="h-8 w-8 sm:h-10 sm:w-10 text-white animate-spin" />
                   </div>
                 </div>
-                <p className="font-bold text-xl sm:text-2xl text-green-900 dark:text-green-100 mb-2">
-                  {progress === 100 ? 'Download Complete!' : 'Downloading File...'}
+                <p className="font-bold text-xl sm:text-2xl text-blue-900 dark:text-blue-100 mb-2">
+                  Receiving File...
                 </p>
-                <p className="text-sm sm:text-base text-green-700 dark:text-green-300 mb-4">
-                  {currentFileName || 'Receiving file'}
+                <p className="text-sm sm:text-base text-blue-700 dark:text-blue-300 mb-4">
+                  {currentFileName || 'Downloading...'}
                 </p>
                 <div className="bg-white/50 dark:bg-black/20 rounded-lg p-3 inline-flex items-center gap-2">
-                  <div className="h-2 w-2 bg-green-500 rounded-full animate-pulse"></div>
-                  <p className="text-xs sm:text-sm font-medium">Secure P2P connection active</p>
+                  <div className="h-2 w-2 bg-blue-500 rounded-full animate-pulse"></div>
+                  <p className="text-xs sm:text-sm font-medium">Transfer in progress</p>
                 </div>
               </div>
             </div>
 
-            {progress > 0 && (
-              <div className="space-y-4 bg-blue-50 dark:bg-blue-950/50 p-6 rounded-xl border-2 border-blue-200 dark:border-blue-800">
-                <div className="flex justify-between items-center">
-                  <div className="flex items-center gap-2">
-                    <Loader2 className="h-5 w-5 animate-spin text-blue-600 dark:text-blue-400" />
-                    <span className="font-semibold text-sm sm:text-base">Receiving file...</span>
-                  </div>
-                  <span className="text-2xl font-bold text-blue-600 dark:text-blue-400">{progress}%</span>
+            <div className="space-y-4 bg-blue-50 dark:bg-blue-950/50 p-6 rounded-xl border-2 border-blue-200 dark:border-blue-800">
+              <div className="flex justify-between items-center">
+                <div className="flex items-center gap-2">
+                  <Loader2 className="h-5 w-5 animate-spin text-blue-600 dark:text-blue-400" />
+                  <span className="font-semibold text-sm sm:text-base">Receiving file...</span>
                 </div>
-                <div className="relative">
-                  <Progress value={progress} className="h-3" />
-                </div>
-                {progress === 100 && (
-                  <p className="text-sm sm:text-base text-green-600 dark:text-green-400 font-medium flex items-center gap-2">
-                    <CheckCircle2 className="h-5 w-5" />
-                    File downloaded successfully!
-                  </p>
-                )}
+                <span className="text-2xl font-bold text-blue-600 dark:text-blue-400">{progress}%</span>
               </div>
-            )}
+              <div className="relative h-3 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden shadow-inner">
+                <div 
+                  className="h-full bg-blue-500 dark:bg-blue-600 transition-all duration-300 ease-out"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+              <p className="text-xs text-center text-muted-foreground">Transfer in progress • Do not close this page</p>
+            </div>
           </div>
         )}
 
-        {isConnected && receivedFiles.length === 0 && availableFiles.length === 0 && downloadingFileIndex === null && (
+        {isConnected && progress === 100 && receivedFiles.length > 0 && (
           <div className="space-y-6">
             <div className="relative overflow-hidden bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950 dark:to-emerald-950 p-6 sm:p-8 rounded-xl border-2 border-green-500 dark:border-green-600 shadow-xl">
               <div className="absolute top-0 right-0 w-32 h-32 bg-green-400 dark:bg-green-600 rounded-full blur-3xl opacity-20"></div>
@@ -337,33 +333,17 @@ export function FileReceiver({ onBack, initialRoomCode = "" }: FileReceiverProps
                   </div>
                 </div>
                 <p className="font-bold text-xl sm:text-2xl text-green-900 dark:text-green-100 mb-2">
-                  Connected to Sender!
+                  Download Complete!
                 </p>
                 <p className="text-sm sm:text-base text-green-700 dark:text-green-300 mb-4">
-                  {currentFileName ? `Receiving: ${currentFileName}` : 'Waiting for file transfer to begin...'}
+                  File downloaded successfully
                 </p>
                 <div className="bg-white/50 dark:bg-black/20 rounded-lg p-3 inline-flex items-center gap-2">
-                  <div className="h-2 w-2 bg-green-500 rounded-full animate-pulse"></div>
-                  <p className="text-xs sm:text-sm font-medium">Secure P2P connection active</p>
+                  <CheckCircle2 className="h-4 w-4 text-green-600" />
+                  <p className="text-xs sm:text-sm font-medium">Transfer complete</p>
                 </div>
               </div>
             </div>
-
-            {progress > 0 && (
-              <div className="space-y-4 bg-blue-50 dark:bg-blue-950/50 p-6 rounded-xl border-2 border-blue-200 dark:border-blue-800">
-                <div className="flex justify-between items-center">
-                  <div className="flex items-center gap-2">
-                    <Loader2 className="h-5 w-5 animate-spin text-blue-600 dark:text-blue-400" />
-                    <span className="font-semibold text-sm sm:text-base">Receiving file...</span>
-                  </div>
-                  <span className="text-2xl font-bold text-blue-600 dark:text-blue-400">{progress}%</span>
-                </div>
-                <div className="relative">
-                  <Progress value={progress} className="h-3" />
-                </div>
-                <p className="text-xs text-center text-muted-foreground">Transfer in progress • Do not close this page</p>
-              </div>
-            )}
           </div>
         )}
 
