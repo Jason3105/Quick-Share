@@ -19,6 +19,7 @@ export function FileReceiver({ onBack, initialRoomCode = "" }: FileReceiverProps
   const [showScanner, setShowScanner] = useState(false);
   const [hasJoinedRoom, setHasJoinedRoom] = useState(false);
   const hasAttemptedJoin = useRef(false);
+  const isProcessingQRScan = useRef(false);
   
   const { 
     joinRoom, 
@@ -72,9 +73,18 @@ export function FileReceiver({ onBack, initialRoomCode = "" }: FileReceiverProps
   };
 
   const handleQRScan = (scannedCode: string) => {
+    // Prevent processing multiple scans
+    if (isProcessingQRScan.current || hasJoinedRoom) {
+      console.log("Already processing a QR scan or joined room, ignoring");
+      return;
+    }
+    
+    isProcessingQRScan.current = true;
+    console.log("Processing QR scan:", scannedCode);
     setCode(scannedCode);
     setShowScanner(false);
     setHasJoinedRoom(true);
+    
     // Auto-join after scanning
     setTimeout(() => {
       joinRoom(scannedCode);

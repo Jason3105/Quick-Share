@@ -16,6 +16,7 @@ export function QRScanner({ onScan, onClose }: QRScannerProps) {
   const [isScanning, setIsScanning] = useState(true);
   const readerRef = useRef<BrowserMultiFormatReader | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const hasScanned = useRef(false);
 
   useEffect(() => {
     const codeReader = new BrowserMultiFormatReader();
@@ -66,7 +67,8 @@ export function QRScanner({ onScan, onClose }: QRScannerProps) {
             selectedDeviceId,
             videoRef.current,
             (result, error) => {
-              if (result) {
+              if (result && !hasScanned.current) {
+                hasScanned.current = true;
                 const text = result.getText();
                 console.log("QR Code scanned:", text);
                 
@@ -77,11 +79,21 @@ export function QRScanner({ onScan, onClose }: QRScannerProps) {
                   if (joinParam) {
                     // Extract just the room code (first 6 characters before timestamp)
                     const roomCode = joinParam.split(":")[0];
+                    
+                    // Stop scanning and close scanner
+                    if (streamRef.current) {
+                      streamRef.current.getTracks().forEach(track => track.stop());
+                    }
+                    
                     onScan(roomCode);
                   }
                 } catch {
                   // If not a URL, treat as direct code
                   if (text.length >= 6) {
+                    // Stop scanning and close scanner
+                    if (streamRef.current) {
+                      streamRef.current.getTracks().forEach(track => track.stop());
+                    }
                     onScan(text.substring(0, 6).toUpperCase());
                   }
                 }
