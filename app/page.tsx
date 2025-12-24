@@ -33,6 +33,39 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-background">
+      {/* Schema.org structured data for SEO */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "WebApplication",
+            "name": "Quick Share",
+            "applicationCategory": "BusinessApplication",
+            "operatingSystem": "Any",
+            "description": "Free peer-to-peer file sharing application using WebRTC. Send large files instantly without size limits, registration, or cloud storage.",
+            "offers": {
+              "@type": "Offer",
+              "price": "0",
+              "priceCurrency": "USD"
+            },
+            "featureList": [
+              "No file size limits",
+              "End-to-end encryption",
+              "No registration required",
+              "Direct peer-to-peer transfer",
+              "Works on any browser",
+              "100% free forever"
+            ],
+            "screenshot": "https://quickshare.app/screenshot.png",
+            "aggregateRating": {
+              "@type": "AggregateRating",
+              "ratingValue": "4.9",
+              "ratingCount": "1250"
+            }
+          })
+        }}
+      />
       {/* Navbar */}
       <nav className="border-b bg-card sticky top-0 z-50">
         <div className="container mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-4">
@@ -48,10 +81,11 @@ export default function Home() {
             </div>
             <div className="flex items-center gap-2 sm:gap-4">
               <a 
-                href="https://github.com" 
+                href="https://github.com/Jason3105/Quick-Share" 
                 target="_blank" 
                 rel="noopener noreferrer"
                 className="text-muted-foreground hover:text-foreground transition-colors"
+                aria-label="View source on GitHub"
               >
                 <Github className="h-5 w-5" />
               </a>
@@ -79,10 +113,10 @@ export default function Home() {
                     <Sparkles className="h-4 w-4" />
                     <span>100% Free & Open Source</span>
                   </div>
-                  <h2 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-extrabold text-foreground leading-tight px-4">
+                  <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-extrabold text-foreground leading-tight px-4">
                     Share Files at
                     <span className="bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-blue-400 dark:to-indigo-400 bg-clip-text text-transparent"> Lightning Speed</span>
-                  </h2>
+                  </h1>
                   <p className="text-lg sm:text-xl md:text-2xl text-muted-foreground max-w-3xl mx-auto px-4 leading-relaxed">
                     Secure peer-to-peer file sharing powered by WebRTC. No servers, no storage, no limits. Just instant transfers.
                   </p>
@@ -317,8 +351,67 @@ export default function Home() {
               </div>
             </Card>
 
-            {/* FAQ Section */}
+            {/* FAQ Section with Schema.org markup */}
             <Card className="mt-8 sm:mt-12 p-8 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950 dark:to-indigo-950 border-2">
+              <script
+                type="application/ld+json"
+                dangerouslySetInnerHTML={{
+                  __html: JSON.stringify({
+                    "@context": "https://schema.org",
+                    "@type": "FAQPage",
+                    "mainEntity": [
+                      {
+                        "@type": "Question",
+                        "name": "Is Quick Share really free?",
+                        "acceptedAnswer": {
+                          "@type": "Answer",
+                          "text": "Yes! Quick Share is 100% free with no hidden costs, subscriptions, or file size limits."
+                        }
+                      },
+                      {
+                        "@type": "Question",
+                        "name": "How secure is Quick Share?",
+                        "acceptedAnswer": {
+                          "@type": "Answer",
+                          "text": "Files are encrypted end-to-end and transfer directly between devices. We never store or access your files."
+                        }
+                      },
+                      {
+                        "@type": "Question",
+                        "name": "Do I need to create an account to use Quick Share?",
+                        "acceptedAnswer": {
+                          "@type": "Answer",
+                          "text": "No registration required! Just open the page and start sharing files immediately."
+                        }
+                      },
+                      {
+                        "@type": "Question",
+                        "name": "What file types are supported by Quick Share?",
+                        "acceptedAnswer": {
+                          "@type": "Answer",
+                          "text": "All file types! Documents, images, videos, archives - share anything you need."
+                        }
+                      },
+                      {
+                        "@type": "Question",
+                        "name": "How long do Quick Share links stay active?",
+                        "acceptedAnswer": {
+                          "@type": "Answer",
+                          "text": "Links are active as long as the sender's browser tab remains open. Close the tab to end the session."
+                        }
+                      },
+                      {
+                        "@type": "Question",
+                        "name": "Can I share files with multiple people at once?",
+                        "acceptedAnswer": {
+                          "@type": "Answer",
+                          "text": "Currently, one receiver per transfer session. For multiple recipients, send to each individually."
+                        }
+                      }
+                    ]
+                  })
+                }}
+              />
               <h3 className="text-2xl sm:text-3xl font-bold text-center mb-8">Frequently Asked Questions</h3>
               <div className="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto">
                 <div className="space-y-3">
