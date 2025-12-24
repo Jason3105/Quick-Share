@@ -195,15 +195,23 @@ export function useWebRTC() {
     const code = nanoid(6).toUpperCase();
     setRoomId(code);
     setHasJoined(true);
-    if (socket) {
+    if (socket && socket.connected) {
+      console.log("Creating room:", code);
       socket.emit("create-room", { roomId: code });
+      
+      // Remove old listeners to prevent duplicates
+      socket.off("offer-request");
+      socket.off("answer");
+      socket.off("ice-candidate");
       
       socket.on("offer-request", async () => {
         try {
+          console.log("Received offer request from receiver");
           const pc = createPeerConnection(true);
           const offer = await pc.createOffer();
           await pc.setLocalDescription(offer);
           socket.emit("offer", { roomId: code, offer });
+          console.log("Sent offer to receiver");
         } catch (error) {
           console.error("Error creating offer:", error);
         }
@@ -211,9 +219,11 @@ export function useWebRTC() {
 
       socket.on("answer", async ({ answer }: { answer: RTCSessionDescriptionInit }) => {
         try {
+          console.log("Received answer from receiver");
           const currentPc = peerConnectionRef.current;
           if (currentPc) {
             await currentPc.setRemoteDescription(new RTCSessionDescription(answer));
+            console.log("Connection established with receiver");
           }
         } catch (error) {
           console.error("Error handling answer:", error);
@@ -225,6 +235,7 @@ export function useWebRTC() {
           const currentPc = peerConnectionRef.current;
           if (currentPc && currentPc.remoteDescription) {
             await currentPc.addIceCandidate(new RTCIceCandidate(candidate));
+            console.log("Added ICE candidate");
           }
         } catch (error) {
           console.error("Error adding ICE candidate:", error);
@@ -236,28 +247,43 @@ export function useWebRTC() {
 
   // Join room (receiver)
   const joinRoom = useCallback((code: string) => {
-    // Prevent duplicate joins
+    console.log("Attempting to join room:", code, "Current roomId:", roomId, "hasJoined:", hasJoined);
+    
+    // Prevent duplicate joins to the same room
     if (hasJoined && roomId === code) {
-      console.log("Already joined room:", code);
+      console.log("Already joined this room:", code);
       return;
     }
 
     setRoomId(code);
-    if (socket) {
+    setHasJoined(true);
+    
+    if (socket && socket.connected) {
+      console.log("Emitting join-room event for:", code);
       socket.emit("join-room", { roomId: code });
       
+      // Create peer connection for receiver
+      console.log("Creating peer connection as receiver");
       const pc = createPeerConnection(false);
 
+      // Request offer from sender
+      console.log("Requesting offer from sender");
       socket.emit("request-offer", { roomId: code });
+
+      // Remove old listeners to prevent duplicates
+      socket.off("offer");
+      socket.off("ice-candidate");
 
       socket.on("offer", async ({ offer }: { offer: RTCSessionDescriptionInit }) => {
         try {
+          console.log("Received offer from sender");
           const currentPc = peerConnectionRef.current;
           if (currentPc) {
             await currentPc.setRemoteDescription(new RTCSessionDescription(offer));
             const answer = await currentPc.createAnswer();
             await currentPc.setLocalDescription(answer);
             socket.emit("answer", { roomId: code, answer });
+            console.log("Sent answer to sender");
           }
         } catch (error) {
           console.error("Error handling offer:", error);
@@ -269,11 +295,16 @@ export function useWebRTC() {
           const currentPc = peerConnectionRef.current;
           if (currentPc && currentPc.remoteDescription) {
             await currentPc.addIceCandidate(new RTCIceCandidate(candidate));
+            console.log("Added ICE candidate");
+          } else if (currentPc) {
+            console.log("Queuing ICE candidate - no remote description yet");
           }
         } catch (error) {
           console.error("Error adding ICE candidate:", error);
         }
       });
+    } else {
+      console.error("Socket not connected! Cannot join room.");
     }
   }, [socket, createPeerConnection, hasJoined, roomId]);
 

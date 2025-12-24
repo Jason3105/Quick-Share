@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +18,8 @@ export function FileReceiver({ onBack, initialRoomCode = "" }: FileReceiverProps
   const [code, setCode] = useState(initialRoomCode);
   const [showScanner, setShowScanner] = useState(false);
   const [hasJoinedRoom, setHasJoinedRoom] = useState(false);
+  const hasAttemptedJoin = useRef(false);
+  
   const { 
     joinRoom, 
     isConnected, 
@@ -32,18 +34,21 @@ export function FileReceiver({ onBack, initialRoomCode = "" }: FileReceiverProps
 
   // Auto-join if initial room code is provided
   useEffect(() => {
-    if (initialRoomCode && initialRoomCode.trim() && !hasJoinedRoom) {
+    if (initialRoomCode && initialRoomCode.trim() && !hasAttemptedJoin.current) {
+      console.log("Auto-joining room:", initialRoomCode);
+      hasAttemptedJoin.current = true;
       setCode(initialRoomCode);
       setHasJoinedRoom(true);
-      // Small delay to ensure everything is initialized
+      // Small delay to ensure socket is connected
       setTimeout(() => {
         joinRoom(initialRoomCode.trim());
-      }, 100);
+      }, 500);
     }
-  }, [initialRoomCode, joinRoom, hasJoinedRoom]);
+  }, [initialRoomCode, joinRoom]);
 
   const handleJoin = () => {
     if (code.trim() && !hasJoinedRoom) {
+      console.log("Manually joining room:", code.trim());
       joinRoom(code.trim());
       setHasJoinedRoom(true);
     }
