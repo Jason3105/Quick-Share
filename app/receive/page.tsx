@@ -20,7 +20,11 @@ function ReceiveContent() {
     }
   }
   
-  return <FileReceiver onBack={() => router.push("/")} initialRoomCode={roomCode} />;
+  return (
+    <div className="container mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-12">
+      <FileReceiver onBack={() => router.push("/")} initialRoomCode={roomCode} />
+    </div>
+  );
 }
 
 export default function ReceivePage() {

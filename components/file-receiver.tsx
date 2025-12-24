@@ -17,35 +17,42 @@ interface FileReceiverProps {
 export function FileReceiver({ onBack, initialRoomCode = "" }: FileReceiverProps) {
   const [code, setCode] = useState(initialRoomCode);
   const [showScanner, setShowScanner] = useState(false);
+  const [hasJoinedRoom, setHasJoinedRoom] = useState(false);
   const { 
     joinRoom, 
     isConnected, 
     receivedFiles, 
     currentFileName,
     transferProgress,
-    connectionState 
+    connectionState,
+    availableFiles,
+    requestFileDownload,
+    downloadingFileIndex
   } = useWebRTC();
 
   // Auto-join if initial room code is provided
   useEffect(() => {
-    if (initialRoomCode && initialRoomCode.trim()) {
+    if (initialRoomCode && initialRoomCode.trim() && !hasJoinedRoom) {
       setCode(initialRoomCode);
+      setHasJoinedRoom(true);
       // Small delay to ensure everything is initialized
       setTimeout(() => {
         joinRoom(initialRoomCode.trim());
       }, 100);
     }
-  }, [initialRoomCode, joinRoom]);
+  }, [initialRoomCode, joinRoom, hasJoinedRoom]);
 
   const handleJoin = () => {
-    if (code.trim()) {
+    if (code.trim() && !hasJoinedRoom) {
       joinRoom(code.trim());
+      setHasJoinedRoom(true);
     }
   };
 
   const handleQRScan = (scannedCode: string) => {
     setCode(scannedCode);
     setShowScanner(false);
+    setHasJoinedRoom(true);
     // Auto-join after scanning
     setTimeout(() => {
       joinRoom(scannedCode);
@@ -119,11 +126,11 @@ export function FileReceiver({ onBack, initialRoomCode = "" }: FileReceiverProps
                 />
                 <Button 
                   onClick={handleJoin} 
-                  disabled={!code.trim()} 
+                  disabled={!code.trim() || hasJoinedRoom} 
                   className="shrink-0 h-14 sm:h-16 px-6 sm:px-8 text-base shadow-lg hover:shadow-xl transition-all"
                 >
                   <Wifi className="mr-2 h-5 w-5" />
-                  Join
+                  {hasJoinedRoom ? "Joined" : "Join"}
                 </Button>
               </div>
             </div>
@@ -163,7 +170,116 @@ export function FileReceiver({ onBack, initialRoomCode = "" }: FileReceiverProps
           </div>
         )}
 
-        {isConnected && receivedFiles.length === 0 && (
+        {isConnected && availableFiles.length > 0 && receivedFiles.length === 0 && downloadingFileIndex === null && (
+          <div className="space-y-6">
+            <div className="relative overflow-hidden bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950 dark:to-emerald-950 p-6 sm:p-8 rounded-xl border-2 border-green-500 dark:border-green-600 shadow-xl">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-green-400 dark:bg-green-600 rounded-full blur-3xl opacity-20"></div>
+              <div className="relative text-center">
+                <div className="inline-block mb-4">
+                  <div className="h-16 w-16 sm:h-20 sm:w-20 rounded-full bg-green-500 dark:bg-green-600 flex items-center justify-center shadow-lg mx-auto">
+                    <CheckCircle2 className="h-8 w-8 sm:h-10 sm:w-10 text-white" />
+                  </div>
+                </div>
+                <p className="font-bold text-xl sm:text-2xl text-green-900 dark:text-green-100 mb-2">
+                  Connected Successfully!
+                </p>
+                <p className="text-sm sm:text-base text-green-700 dark:text-green-300 mb-4">
+                  Sender is sharing {availableFiles.length} {availableFiles.length === 1 ? 'file' : 'files'} with you
+                </p>
+                <div className="bg-white/50 dark:bg-black/20 rounded-lg p-3 inline-flex items-center gap-2">
+                  <div className="h-2 w-2 bg-green-500 rounded-full animate-pulse"></div>
+                  <p className="text-xs sm:text-sm font-medium">Secure P2P connection active</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-blue-50 dark:bg-blue-950/50 p-6 rounded-xl border-2 border-blue-200 dark:border-blue-800">
+              <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
+                <FileDown className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                Available Files ({availableFiles.length})
+              </h3>
+              <div className="space-y-3">
+                {availableFiles.map((file) => (
+                  <div key={file.index} className="bg-white dark:bg-slate-900 p-4 rounded-lg border-2 flex items-center justify-between gap-3 hover:border-blue-500 transition-all">
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <div className="h-12 w-12 rounded-lg bg-blue-100 dark:bg-blue-900 flex items-center justify-center shrink-0">
+                        <FileDown className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-sm break-all">{file.name}</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {(file.size / 1024 / 1024).toFixed(2)} MB
+                        </p>
+                      </div>
+                    </div>
+                    <Button 
+                      onClick={() => requestFileDownload(file.index)} 
+                      size="sm"
+                      className="shrink-0 h-10 px-4"
+                    >
+                      <Download className="h-4 w-4 mr-2" />
+                      Download
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="bg-amber-50 dark:bg-amber-950/50 p-5 rounded-lg border border-amber-200 dark:border-amber-800">
+              <p className="text-xs sm:text-sm text-muted-foreground text-center">
+                💡 <strong>Tip:</strong> Click the download button next to any file to start downloading
+              </p>
+            </div>
+          </div>
+        )}
+
+        {isConnected && downloadingFileIndex !== null && (
+          <div className="space-y-6">
+            <div className="relative overflow-hidden bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950 dark:to-emerald-950 p-6 sm:p-8 rounded-xl border-2 border-green-500 dark:border-green-600 shadow-xl">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-green-400 dark:bg-green-600 rounded-full blur-3xl opacity-20"></div>
+              <div className="relative text-center">
+                <div className="inline-block mb-4">
+                  <div className="h-16 w-16 sm:h-20 sm:w-20 rounded-full bg-green-500 dark:bg-green-600 flex items-center justify-center shadow-lg mx-auto">
+                    <CheckCircle2 className="h-8 w-8 sm:h-10 sm:w-10 text-white" />
+                  </div>
+                </div>
+                <p className="font-bold text-xl sm:text-2xl text-green-900 dark:text-green-100 mb-2">
+                  {progress === 100 ? 'Download Complete!' : 'Downloading File...'}
+                </p>
+                <p className="text-sm sm:text-base text-green-700 dark:text-green-300 mb-4">
+                  {currentFileName || 'Receiving file'}
+                </p>
+                <div className="bg-white/50 dark:bg-black/20 rounded-lg p-3 inline-flex items-center gap-2">
+                  <div className="h-2 w-2 bg-green-500 rounded-full animate-pulse"></div>
+                  <p className="text-xs sm:text-sm font-medium">Secure P2P connection active</p>
+                </div>
+              </div>
+            </div>
+
+            {progress > 0 && (
+              <div className="space-y-4 bg-blue-50 dark:bg-blue-950/50 p-6 rounded-xl border-2 border-blue-200 dark:border-blue-800">
+                <div className="flex justify-between items-center">
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="h-5 w-5 animate-spin text-blue-600 dark:text-blue-400" />
+                    <span className="font-semibold text-sm sm:text-base">Receiving file...</span>
+                  </div>
+                  <span className="text-2xl font-bold text-blue-600 dark:text-blue-400">{progress}%</span>
+                </div>
+                <div className="relative">
+                  <Progress value={progress} className="h-3" />
+                </div>
+                {progress === 100 && (
+                  <p className="text-sm sm:text-base text-green-600 dark:text-green-400 font-medium flex items-center gap-2">
+                    <CheckCircle2 className="h-5 w-5" />
+                    File downloaded successfully!
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {isConnected && receivedFiles.length === 0 && availableFiles.length === 0 && downloadingFileIndex === null && (
           <div className="space-y-6">
             <div className="relative overflow-hidden bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950 dark:to-emerald-950 p-6 sm:p-8 rounded-xl border-2 border-green-500 dark:border-green-600 shadow-xl">
               <div className="absolute top-0 right-0 w-32 h-32 bg-green-400 dark:bg-green-600 rounded-full blur-3xl opacity-20"></div>
@@ -215,10 +331,10 @@ export function FileReceiver({ onBack, initialRoomCode = "" }: FileReceiverProps
                   </div>
                   <div className="flex-1">
                     <p className="font-bold text-lg sm:text-xl text-emerald-900 dark:text-emerald-100 mb-1">
-                      ✓ {receivedFiles.length} {receivedFiles.length === 1 ? 'File' : 'Files'} Received Successfully!
+                      ✓ {receivedFiles.length} {receivedFiles.length === 1 ? 'File' : 'Files'} Downloaded Successfully!
                     </p>
                     <p className="text-sm text-emerald-700 dark:text-emerald-300">
-                      Total size: {(receivedFiles.reduce((acc, f) => acc + f.blob.size, 0) / 1024 / 1024).toFixed(2)} MB
+                      Files have been saved to your device
                     </p>
                   </div>
                 </div>
@@ -237,10 +353,11 @@ export function FileReceiver({ onBack, initialRoomCode = "" }: FileReceiverProps
                       <Button 
                         onClick={() => handleDownload(file)} 
                         size="sm"
+                        variant="outline"
                         className="shrink-0"
                       >
                         <Download className="h-4 w-4 mr-1" />
-                        Download
+                        Download Again
                       </Button>
                     </div>
                   ))}
@@ -248,14 +365,14 @@ export function FileReceiver({ onBack, initialRoomCode = "" }: FileReceiverProps
               </div>
             </div>
 
-            <Button onClick={handleDownloadAll} className="w-full h-14 text-lg shadow-lg hover:shadow-xl transition-all" size="lg">
+            <Button onClick={handleDownloadAll} variant="outline" className="w-full h-14 text-lg shadow-lg hover:shadow-xl transition-all" size="lg">
               <Download className="mr-2 h-6 w-6" />
-              Download All Files ({receivedFiles.length})
+              Download All Again ({receivedFiles.length})
             </Button>
 
-            <div className="bg-amber-50 dark:bg-amber-950/50 p-5 rounded-lg border border-amber-200 dark:border-amber-800">
+            <div className="bg-green-50 dark:bg-green-950/50 p-5 rounded-lg border border-green-200 dark:border-green-800">
               <p className="text-xs sm:text-sm text-muted-foreground text-center">
-                ⚠️ <strong>Note:</strong> After downloading, you can safely close this page
+                ✓ <strong>Success:</strong> Files have been automatically saved to your Downloads folder. You can close this page now.
               </p>
             </div>
           </div>

@@ -16,15 +16,18 @@ export function FileSender({ onBack }: FileSenderProps) {
   const [roomCode, setRoomCode] = useState<string>("");
   const [copied, setCopied] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
+  const [filesSentMap, setFilesSentMap] = useState<{[key: number]: boolean}>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { 
     isConnected, 
     connectionState, 
-    sendFile, 
+    sendFile,
+    sendFileList,
+    setFileRequestHandler,
     transferProgress,
     createRoom,
-    peersConnected 
+    peersConnected
   } = useWebRTC();
 
   useEffect(() => {
@@ -33,6 +36,24 @@ export function FileSender({ onBack }: FileSenderProps) {
       setRoomCode(code);
     }
   }, [files, roomCode, createRoom]);
+
+  // Send file list when connection is established
+  useEffect(() => {
+    if (isConnected && files.length > 0) {
+      sendFileList(files);
+    }
+  }, [isConnected, files, sendFileList]);
+
+  // Handle download requests from receiver
+  useEffect(() => {
+    setFileRequestHandler(async (fileIndex: number) => {
+      console.log("Sending file at index:", fileIndex);
+      if (files[fileIndex]) {
+        await sendFile(files[fileIndex]);
+        setFilesSentMap(prev => ({ ...prev, [fileIndex]: true }));
+      }
+    });
+  }, [files, sendFile, setFileRequestHandler]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = e.target.files;

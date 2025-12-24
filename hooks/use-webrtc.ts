@@ -22,9 +22,14 @@ export function useWebRTC() {
   const [peersConnected, setPeersConnected] = useState(0);
   const [roomId, setRoomId] = useState<string>("");
   const [currentFileName, setCurrentFileName] = useState<string>("");
+  const [hasJoined, setHasJoined] = useState(false);
+  const [availableFiles, setAvailableFiles] = useState<Array<{name: string; size: number; index: number}>>([]);
+  const [downloadingFileIndex, setDownloadingFileIndex] = useState<number | null>(null);
 
   const receivedChunks = useRef<ArrayBuffer[]>([]);
   const fileMetadata = useRef<{ name: string; size: number } | null>(null);
+  const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
+  const onFileRequestCallback = useRef<((fileIndex: number) => void) | null>(null);
 
   // Initialize Socket.io connection
   useEffect(() => {
@@ -42,12 +47,17 @@ export function useWebRTC() {
       setConnectionState("Disconnected from server");
     });
 
-    socketInstance.on("room-joined", ({ roomId }: { roomId: string }) => {
-      console.log("Joined room:", roomId);
+    socketInstance.on("room-joined", ({ roomId, peerCount }: { roomId: string; peerCount?: number }) => {
+      console.log("Joined room:", roomId, "Peer count:", peerCount);
       setConnectionState(`Joined room: ${roomId}`);
+      setHasJoined(true);
+      if (peerCount !== undefined) {
+        setPeersConnected(peerCount);
+      }
     });
 
-    socketInstance.on("peer-joined", () => {
+    socketInstance.on("peer-joined", ({ peerId }: { peerId?: string }) => {
+      console.log("Peer joined:", peerId);
       setPeersConnected((prev) => prev + 1);
     });
 
@@ -64,6 +74,11 @@ export function useWebRTC() {
 
   // Create WebRTC peer connection
   const createPeerConnection = useCallback((isSender: boolean) => {
+    // Close existing connection if any
+    if (peerConnectionRef.current) {
+      peerConnectionRef.current.close();
+    }
+
     const pc = new RTCPeerConnection({
       iceServers: [
         { urls: "stun:stun.l.google.com:19302" },
@@ -97,6 +112,7 @@ export function useWebRTC() {
       };
     }
 
+    peerConnectionRef.current = pc;
     setPeerConnection(pc);
     return pc;
   }, [socket, roomId]);
@@ -119,7 +135,18 @@ export function useWebRTC() {
       if (typeof event.data === "string") {
         // Metadata message
         const metadata = JSON.parse(event.data);
-        if (metadata.type === "file-metadata") {
+        
+        if (metadata.type === "file-list") {
+          // Receiver gets list of available files
+          setAvailableFiles(metadata.files);
+          console.log("Received file list:", metadata.files);
+        } else if (metadata.type === "download-request") {
+          // Sender receives download request from receiver
+          if (onFileRequestCallback.current) {
+            onFileRequestCallback.current(metadata.fileIndex);
+          }
+          console.log("Received download request for file:", metadata.fileIndex);
+        } else if (metadata.type === "file-metadata") {
           fileMetadata.current = {
             name: metadata.name,
             size: metadata.size,
@@ -130,12 +157,26 @@ export function useWebRTC() {
         } else if (metadata.type === "file-end") {
           // Reconstruct file
           const blob = new Blob(receivedChunks.current);
+          const fileName = fileMetadata.current?.name || "unknown";
+          
           setReceivedFiles(prev => [...prev, {
-            name: fileMetadata.current?.name || "unknown",
+            name: fileName,
             blob,
           }]);
+          
+          // Automatically trigger download
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = fileName;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+          
           setTransferProgress(100);
           setCurrentFileName("");
+          setDownloadingFileIndex(null);
         }
       } else {
         // File chunk
@@ -153,33 +194,54 @@ export function useWebRTC() {
   const createRoom = useCallback(() => {
     const code = nanoid(6).toUpperCase();
     setRoomId(code);
+    setHasJoined(true);
     if (socket) {
       socket.emit("create-room", { roomId: code });
       
       socket.on("offer-request", async () => {
-        const pc = createPeerConnection(true);
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-        socket.emit("offer", { roomId: code, offer });
+        try {
+          const pc = createPeerConnection(true);
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+          socket.emit("offer", { roomId: code, offer });
+        } catch (error) {
+          console.error("Error creating offer:", error);
+        }
       });
 
       socket.on("answer", async ({ answer }: { answer: RTCSessionDescriptionInit }) => {
-        if (peerConnection) {
-          await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+        try {
+          const currentPc = peerConnectionRef.current;
+          if (currentPc) {
+            await currentPc.setRemoteDescription(new RTCSessionDescription(answer));
+          }
+        } catch (error) {
+          console.error("Error handling answer:", error);
         }
       });
 
       socket.on("ice-candidate", async ({ candidate }: { candidate: RTCIceCandidateInit }) => {
-        if (peerConnection) {
-          await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+        try {
+          const currentPc = peerConnectionRef.current;
+          if (currentPc && currentPc.remoteDescription) {
+            await currentPc.addIceCandidate(new RTCIceCandidate(candidate));
+          }
+        } catch (error) {
+          console.error("Error adding ICE candidate:", error);
         }
       });
     }
     return code;
-  }, [socket, createPeerConnection, peerConnection]);
+  }, [socket, createPeerConnection]);
 
   // Join room (receiver)
   const joinRoom = useCallback((code: string) => {
+    // Prevent duplicate joins
+    if (hasJoined && roomId === code) {
+      console.log("Already joined room:", code);
+      return;
+    }
+
     setRoomId(code);
     if (socket) {
       socket.emit("join-room", { roomId: code });
@@ -189,17 +251,68 @@ export function useWebRTC() {
       socket.emit("request-offer", { roomId: code });
 
       socket.on("offer", async ({ offer }: { offer: RTCSessionDescriptionInit }) => {
-        await pc.setRemoteDescription(new RTCSessionDescription(offer));
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-        socket.emit("answer", { roomId: code, answer });
+        try {
+          const currentPc = peerConnectionRef.current;
+          if (currentPc) {
+            await currentPc.setRemoteDescription(new RTCSessionDescription(offer));
+            const answer = await currentPc.createAnswer();
+            await currentPc.setLocalDescription(answer);
+            socket.emit("answer", { roomId: code, answer });
+          }
+        } catch (error) {
+          console.error("Error handling offer:", error);
+        }
       });
 
       socket.on("ice-candidate", async ({ candidate }: { candidate: RTCIceCandidateInit }) => {
-        await pc.addIceCandidate(new RTCIceCandidate(candidate));
+        try {
+          const currentPc = peerConnectionRef.current;
+          if (currentPc && currentPc.remoteDescription) {
+            await currentPc.addIceCandidate(new RTCIceCandidate(candidate));
+          }
+        } catch (error) {
+          console.error("Error adding ICE candidate:", error);
+        }
       });
     }
-  }, [socket, createPeerConnection]);
+  }, [socket, createPeerConnection, hasJoined, roomId]);
+
+  // Send file list to receiver
+  const sendFileList = useCallback((files: File[]) => {
+    if (!dataChannel || dataChannel.readyState !== "open") {
+      console.error("Data channel not ready");
+      return;
+    }
+
+    const fileList = files.map((file, index) => ({
+      name: file.name,
+      size: file.size,
+      index,
+    }));
+
+    dataChannel.send(JSON.stringify({
+      type: "file-list",
+      files: fileList,
+    }));
+
+    console.log("Sent file list to receiver");
+  }, [dataChannel]);
+
+  // Request file download (receiver)
+  const requestFileDownload = useCallback((fileIndex: number) => {
+    if (!dataChannel || dataChannel.readyState !== "open") {
+      console.error("Data channel not ready");
+      return;
+    }
+
+    setDownloadingFileIndex(fileIndex);
+    dataChannel.send(JSON.stringify({
+      type: "download-request",
+      fileIndex,
+    }));
+
+    console.log("Requested file download:", fileIndex);
+  }, [dataChannel]);
 
   // Send file
   const sendFile = useCallback((file: File): Promise<void> => {
@@ -254,15 +367,25 @@ export function useWebRTC() {
     });
   }, [dataChannel]);
 
+  // Set file request handler (for sender)
+  const setFileRequestHandler = useCallback((handler: (fileIndex: number) => void) => {
+    onFileRequestCallback.current = handler;
+  }, []);
+
   return {
     createRoom,
     joinRoom,
     sendFile,
+    sendFileList,
+    requestFileDownload,
+    setFileRequestHandler,
     isConnected,
     connectionState,
     transferProgress,
     receivedFiles,
     currentFileName,
     peersConnected,
+    availableFiles,
+    downloadingFileIndex,
   };
 }
