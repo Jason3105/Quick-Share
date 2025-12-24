@@ -29,22 +29,39 @@ export function FileReceiver({ onBack, initialRoomCode = "" }: FileReceiverProps
     connectionState,
     availableFiles,
     requestFileDownload,
-    downloadingFileIndex
+    downloadingFileIndex,
+    socket
   } = useWebRTC();
 
-  // Auto-join if initial room code is provided
+  // Auto-join if initial room code is provided - wait for socket to connect
   useEffect(() => {
-    if (initialRoomCode && initialRoomCode.trim() && !hasAttemptedJoin.current) {
-      console.log("Auto-joining room:", initialRoomCode);
-      hasAttemptedJoin.current = true;
-      setCode(initialRoomCode);
-      setHasJoinedRoom(true);
-      // Small delay to ensure socket is connected
-      setTimeout(() => {
-        joinRoom(initialRoomCode.trim());
-      }, 500);
+    if (initialRoomCode && initialRoomCode.trim() && !hasAttemptedJoin.current && socket) {
+      console.log("Initial room code provided:", initialRoomCode);
+      
+      const attemptJoin = () => {
+        if (socket.connected) {
+          console.log("Socket connected - auto-joining room:", initialRoomCode);
+          hasAttemptedJoin.current = true;
+          setCode(initialRoomCode);
+          setHasJoinedRoom(true);
+          joinRoom(initialRoomCode.trim());
+        } else {
+          console.log("Socket not connected yet, waiting...");
+          // Wait for socket to connect
+          socket.once("connect", () => {
+            console.log("Socket connected - now joining room:", initialRoomCode);
+            hasAttemptedJoin.current = true;
+            setCode(initialRoomCode);
+            setHasJoinedRoom(true);
+            joinRoom(initialRoomCode.trim());
+          });
+        }
+      };
+      
+      // Small delay to ensure socket initialization is complete
+      setTimeout(attemptJoin, 100);
     }
-  }, [initialRoomCode, joinRoom]);
+  }, [initialRoomCode, joinRoom, socket]);
 
   const handleJoin = () => {
     if (code.trim() && !hasJoinedRoom) {
@@ -141,9 +158,21 @@ export function FileReceiver({ onBack, initialRoomCode = "" }: FileReceiverProps
             </div>
 
             <div className="bg-slate-50 dark:bg-slate-900 p-4 rounded-lg border text-center">
-              <div className="flex items-center justify-center gap-2">
-                <div className="h-2 w-2 bg-blue-500 rounded-full animate-pulse"></div>
-                <span className="text-xs sm:text-sm text-muted-foreground font-medium">{connectionState}</span>
+              <div className="flex flex-col items-center justify-center gap-2">
+                <div className="flex items-center gap-2">
+                  <div className={`h-2 w-2 rounded-full animate-pulse ${
+                    socket?.connected ? 'bg-green-500' : 'bg-yellow-500'
+                  }`}></div>
+                  <span className="text-xs sm:text-sm text-muted-foreground font-medium">
+                    {socket?.connected ? connectionState : 'Connecting to server...'}
+                  </span>
+                </div>
+                {hasJoinedRoom && !isConnected && socket?.connected && (
+                  <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 mt-1">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    <span className="text-xs font-medium">Establishing secure connection...</span>
+                  </div>
+                )}
               </div>
             </div>
 

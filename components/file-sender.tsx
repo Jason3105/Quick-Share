@@ -27,7 +27,8 @@ export function FileSender({ onBack }: FileSenderProps) {
     setFileRequestHandler,
     transferProgress,
     createRoom,
-    peersConnected
+    peersConnected,
+    dataChannel
   } = useWebRTC();
 
   useEffect(() => {
@@ -37,17 +38,18 @@ export function FileSender({ onBack }: FileSenderProps) {
     }
   }, [files, roomCode, createRoom]);
 
-  // Send file list when connection is established
+  // Send file list when connection is established AND data channel is open
   useEffect(() => {
-    if (isConnected && files.length > 0) {
+    if (isConnected && files.length > 0 && dataChannel?.readyState === "open") {
+      console.log("🔗 Connection ready - sending file list");
       sendFileList(files);
     }
-  }, [isConnected, files, sendFileList]);
+  }, [isConnected, files, sendFileList, dataChannel]);
 
   // Handle download requests from receiver
   useEffect(() => {
     setFileRequestHandler(async (fileIndex: number) => {
-      console.log("Sending file at index:", fileIndex);
+      console.log("📤 Sending file at index:", fileIndex);
       if (files[fileIndex]) {
         await sendFile(files[fileIndex]);
         setFilesSentMap(prev => ({ ...prev, [fileIndex]: true }));
@@ -257,18 +259,33 @@ export function FileSender({ onBack }: FileSenderProps) {
                 <div className="flex items-center gap-2">
                   <Users className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                   <span className="text-sm font-medium">
-                    {peersConnected} {peersConnected === 1 ? "receiver" : "receivers"} waiting
+                    {peersConnected > 1 ? `${peersConnected - 1}` : '0'} {peersConnected - 1 === 1 ? "receiver" : "receivers"} in room
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Clock className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-xs text-muted-foreground">{connectionState}</span>
+                  {isConnected ? (
+                    <div className="flex items-center gap-1 text-green-600 dark:text-green-400">
+                      <div className="h-2 w-2 bg-green-500 rounded-full animate-pulse"></div>
+                      <span className="text-xs font-medium">Connected</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1 text-muted-foreground">
+                      <Clock className="h-4 w-4" />
+                      <span className="text-xs">{connectionState}</span>
+                    </div>
+                  )}
                 </div>
               </div>
-              {peersConnected === 0 && (
+              {peersConnected <= 1 && (
                 <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
                   <AlertCircle className="h-3 w-3" />
                   Waiting for receiver to join...
+                </p>
+              )}
+              {peersConnected > 1 && !isConnected && (
+                <p className="text-xs text-blue-600 dark:text-blue-400 mt-2 flex items-center gap-1">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  Establishing connection...
                 </p>
               )}
             </div>

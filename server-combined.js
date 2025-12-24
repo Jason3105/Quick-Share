@@ -43,8 +43,10 @@ app.prepare().then(() => {
     });
 
     socket.on("join-room", ({ roomId }) => {
+      console.log(`📥 join-room event received. Socket: ${socket.id}, Room: ${roomId}`);
       if (rooms.has(roomId)) {
         const room = rooms.get(roomId);
+        console.log(`   Room exists. Current peers:`, room.peers);
         
         // Check if this socket is already in the room to prevent duplicates
         if (!room.peers.includes(socket.id)) {
@@ -52,22 +54,27 @@ app.prepare().then(() => {
           room.peers.push(socket.id);
           
           // Notify all peers in room about new peer (except the one joining)
+          console.log(`   📤 Emitting peer-joined to room ${roomId}`);
           socket.to(roomId).emit("peer-joined", { peerId: socket.id });
           
           // Send current peer count to the joiner
+          console.log(`   📤 Emitting room-joined to ${socket.id}. Peer count: ${room.peers.length}`);
           socket.emit("room-joined", { roomId, peerCount: room.peers.length });
-          console.log(`Client ${socket.id} joined room: ${roomId}. Total peers: ${room.peers.length}`);
+          console.log(`   ✅ Client ${socket.id} joined room: ${roomId}. Total peers: ${room.peers.length}`);
         } else {
           // Already in room, just confirm
           socket.emit("room-joined", { roomId, peerCount: room.peers.length });
-          console.log(`Client ${socket.id} already in room: ${roomId}`);
+          console.log(`   ⚠️  Client ${socket.id} already in room: ${roomId}`);
         }
       } else {
+        console.log(`   ❌ Room ${roomId} not found!`);
         socket.emit("error", { message: "Room not found" });
       }
     });
 
     socket.on("request-offer", ({ roomId }) => {
+      console.log(`📥 request-offer received from ${socket.id} for room ${roomId}`);
+      console.log(`   📤 Emitting offer-request to room ${roomId}`);
       socket.to(roomId).emit("offer-request");
     });
 
