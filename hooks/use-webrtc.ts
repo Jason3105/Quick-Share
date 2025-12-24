@@ -354,9 +354,11 @@ export function useWebRTC() {
   const joinRoom = useCallback((code: string) => {
     console.log("Joining room:", code);
     
-    if (hasJoined && roomId === code) {
-      console.log("Already joined");
-      return;
+    // Close any existing peer connection before creating a new one
+    if (peerConnectionRef.current) {
+      console.log("Closing existing peer connection before rejoining");
+      peerConnectionRef.current.close();
+      peerConnectionRef.current = null;
     }
 
     setRoomId(code);
@@ -459,8 +461,23 @@ export function useWebRTC() {
       // Request offer
       console.log("📨 Requesting offer");
       socket.emit("request-offer", { roomId: code });
+      
+      // Set a timeout for connection establishment
+      const connectionTimeout = setTimeout(() => {
+        if (pc.connectionState !== "connected") {
+          console.error("⏱️ Connection timeout - failed to establish connection within 15 seconds");
+          setConnectionState("Connection timeout - Please try again");
+        }
+      }, 15000); // 15 seconds
+      
+      // Clear timeout if connection succeeds
+      pc.addEventListener("connectionstatechange", () => {
+        if (pc.connectionState === "connected") {
+          clearTimeout(connectionTimeout);
+        }
+      }, { once: true });
     }
-  }, [socket, hasJoined, roomId]);
+  }, [socket]);
 
   // Send file list to receiver
   const sendFileList = useCallback((files: File[]) => {

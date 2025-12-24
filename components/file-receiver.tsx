@@ -85,10 +85,23 @@ export function FileReceiver({ onBack, initialRoomCode = "" }: FileReceiverProps
     setShowScanner(false);
     setHasJoinedRoom(true);
     
-    // Auto-join after scanning
-    setTimeout(() => {
-      joinRoom(scannedCode);
-    }, 100);
+    // Wait for socket to be connected before joining
+    const attemptJoinAfterScan = () => {
+      if (socket?.connected) {
+        console.log("Socket connected - joining room after QR scan:", scannedCode);
+        joinRoom(scannedCode);
+      } else {
+        console.log("Socket not connected yet, waiting...");
+        // Wait for socket to connect
+        socket?.once("connect", () => {
+          console.log("Socket connected - now joining room:", scannedCode);
+          joinRoom(scannedCode);
+        });
+      }
+    };
+    
+    // Small delay to ensure scanner is fully closed and state is settled
+    setTimeout(attemptJoinAfterScan, 300);
   };
 
   const handleDownload = (file: { name: string; blob: Blob }) => {
@@ -106,6 +119,14 @@ export function FileReceiver({ onBack, initialRoomCode = "" }: FileReceiverProps
     receivedFiles.forEach((file) => {
       setTimeout(() => handleDownload(file), 100);
     });
+  };
+  
+  // Reset state to allow retry if connection fails
+  const handleRetry = () => {
+    setHasJoinedRoom(false);
+    hasAttemptedJoin.current = false;
+    isProcessingQRScan.current = false;
+    setCode("");
   };
 
   const progress = transferProgress;
@@ -178,10 +199,23 @@ export function FileReceiver({ onBack, initialRoomCode = "" }: FileReceiverProps
                   </span>
                 </div>
                 {hasJoinedRoom && !isConnected && socket?.connected && (
-                  <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 mt-1">
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                    <span className="text-xs font-medium">Establishing secure connection...</span>
-                  </div>
+                  <>
+                    <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 mt-1">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      <span className="text-xs font-medium">Establishing secure connection...</span>
+                    </div>
+                    {connectionState.includes("timeout") && (
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={handleRetry}
+                        className="mt-2 text-xs"
+                      >
+                        <AlertCircle className="h-3 w-3 mr-1" />
+                        Try Again
+                      </Button>
+                    )}
+                  </>
                 )}
               </div>
             </div>

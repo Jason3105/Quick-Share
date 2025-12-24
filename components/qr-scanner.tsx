@@ -85,7 +85,10 @@ export function QRScanner({ onScan, onClose }: QRScannerProps) {
                       streamRef.current.getTracks().forEach(track => track.stop());
                     }
                     
+                    // Call onScan first, then close
                     onScan(roomCode);
+                    // Close the scanner modal
+                    setTimeout(() => onClose(), 100);
                   }
                 } catch {
                   // If not a URL, treat as direct code
@@ -95,6 +98,8 @@ export function QRScanner({ onScan, onClose }: QRScannerProps) {
                       streamRef.current.getTracks().forEach(track => track.stop());
                     }
                     onScan(text.substring(0, 6).toUpperCase());
+                    // Close the scanner modal
+                    setTimeout(() => onClose(), 100);
                   }
                 }
               }
