@@ -432,7 +432,7 @@ function HomeContent() {
                       Send Large Files Without Limits
                     </h3>
                     <p className="text-sm sm:text-base text-muted-foreground leading-relaxed">
-                      Quick Share enables you to send large files of any size - whether it's a 1GB video, 10GB archive, or even 100GB+ datasets. Unlike traditional file sharing services like WeTransfer, Dropbox, or Google Drive that impose strict file size limits, our peer-to-peer technology transfers files directly between browsers with zero restrictions.
+                      Quick Share enables you to send large files of any size - whether it&apos;s a 1GB video, 10GB archive, or even 100GB+ datasets. Unlike traditional file sharing services like WeTransfer, Dropbox, or Google Drive that impose strict file size limits, our peer-to-peer technology transfers files directly between browsers with zero restrictions.
                     </p>
                   </div>
                   
@@ -491,7 +491,7 @@ function HomeContent() {
 
                 <h3 className="text-xl font-semibold mb-3">Why Choose Quick Share Over Alternatives?</h3>
                 <p className="text-sm sm:text-base text-muted-foreground leading-relaxed mb-4">
-                  Quick Share stands out as the best free alternative to popular file sharing services. Unlike WeTransfer's 2GB free limit, SendAnywhere's restrictions, or the complexity of setting up FTP servers, Quick Share offers unlimited file sizes with zero configuration. It's faster than email attachments, more secure than cloud storage, and simpler than ShareIt or AirDrop alternatives.
+                  Quick Share stands out as the best free alternative to popular file sharing services. Unlike WeTransfer&apos;s 2GB free limit, SendAnywhere&apos;s restrictions, or the complexity of setting up FTP servers, Quick Share offers unlimited file sizes with zero configuration. It&apos;s faster than email attachments, more secure than cloud storage, and simpler than ShareIt or AirDrop alternatives.
                 </p>
 
                 <div className="bg-green-50 dark:bg-green-950/30 p-6 rounded-lg">
