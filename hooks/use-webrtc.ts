@@ -559,12 +559,36 @@ export function useWebRTC() {
         size: file.size,
       }));
 
-      // Send file in chunks with flow control
+      // Send file in chunks with improved flow control
       const reader = new FileReader();
       let offset = 0;
-      const MAX_BUFFER_SIZE = 16 * 1024 * 1024; // 16MB buffer threshold
+      const MAX_BUFFER_SIZE = 256 * 1024; // 256KB buffer threshold for better flow control
+
+      const sendChunk = (chunk: ArrayBuffer) => {
+        dataChannel.send(chunk);
+        offset += chunk.byteLength;
+
+        const progress = Math.round((offset / file.size) * 100);
+        setTransferProgress(progress);
+
+        if (offset < file.size) {
+          readNextChunk();
+        } else {
+          // Send end signal
+          dataChannel.send(JSON.stringify({ type: "file-end" }));
+          setTransferProgress(100);
+          setTimeout(() => resolve(), 100);
+        }
+      };
 
       const readNextChunk = () => {
+        // Wait if buffer is too full
+        if (dataChannel.bufferedAmount > MAX_BUFFER_SIZE) {
+          // Schedule retry after a small delay
+          setTimeout(readNextChunk, 10);
+          return;
+        }
+        
         const slice = file.slice(offset, offset + CHUNK_SIZE);
         reader.readAsArrayBuffer(slice);
       };
@@ -572,55 +596,7 @@ export function useWebRTC() {
       reader.onload = (e) => {
         if (e.target?.result && dataChannel.readyState === "open") {
           const chunk = e.target.result as ArrayBuffer;
-          
-          // Check buffer size before sending
-          if (dataChannel.bufferedAmount > MAX_BUFFER_SIZE) {
-            // Buffer is full, wait for it to drain
-            console.log("⏳ Buffer full, waiting to drain...", dataChannel.bufferedAmount);
-            
-            // Set low threshold to 8MB
-            dataChannel.bufferedAmountLowThreshold = 8 * 1024 * 1024;
-            
-            // Wait for buffer to drain before sending
-            const onBufferLow = () => {
-              console.log("✅ Buffer drained, resuming...");
-              dataChannel.removeEventListener("bufferedamountlow", onBufferLow);
-              
-              // Now send the chunk
-              dataChannel.send(chunk);
-              offset += chunk.byteLength;
-
-              const progress = Math.round((offset / file.size) * 100);
-              setTransferProgress(progress);
-
-              if (offset < file.size) {
-                readNextChunk();
-              } else {
-                // Send end signal
-                dataChannel.send(JSON.stringify({ type: "file-end" }));
-                setTransferProgress(100);
-                setTimeout(() => resolve(), 100);
-              }
-            };
-            
-            dataChannel.addEventListener("bufferedamountlow", onBufferLow);
-          } else {
-            // Buffer has space, send immediately
-            dataChannel.send(chunk);
-            offset += chunk.byteLength;
-
-            const progress = Math.round((offset / file.size) * 100);
-            setTransferProgress(progress);
-
-            if (offset < file.size) {
-              readNextChunk();
-            } else {
-              // Send end signal
-              dataChannel.send(JSON.stringify({ type: "file-end" }));
-              setTransferProgress(100);
-              setTimeout(() => resolve(), 100);
-            }
-          }
+          sendChunk(chunk);
         }
       };
 

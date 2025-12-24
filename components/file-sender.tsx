@@ -340,17 +340,10 @@ export function FileSender({ onBack }: FileSenderProps) {
               </div>
             </div>
 
-            <div className="bg-blue-50 dark:bg-blue-950/50 p-6 rounded-xl border-2 border-blue-200 dark:border-blue-800">
-              <div className="flex items-start gap-3">
-                <Loader2 className="h-5 w-5 text-blue-600 dark:text-blue-400 animate-spin shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-semibold text-sm sm:text-base mb-1">Files shared with receiver</p>
-                  <p className="text-xs sm:text-sm text-muted-foreground">
-                    The receiver can now see your {files.length} {files.length === 1 ? 'file' : 'files'} and download {files.length === 1 ? 'it' : 'them'} when ready
-                  </p>
-                </div>
-              </div>
-            </div>
+            <Button onClick={handleSend} disabled={transferProgress > 0 && transferProgress < 100} className="w-full shadow-lg hover:shadow-xl transition-all text-lg" size="lg">
+              <Send className="mr-2 h-5 w-5" />
+              {transferProgress > 0 && transferProgress < 100 ? 'Sending...' : 'Send Files Now'}
+            </Button>
 
             {transferProgress > 0 && (
               <div className="space-y-3 bg-blue-50 dark:bg-blue-950/50 p-5 rounded-xl border-2 border-blue-200 dark:border-blue-800">

@@ -255,7 +255,7 @@ export function FileReceiver({ onBack, initialRoomCode = "" }: FileReceiverProps
           </div>
         )}
 
-        {isConnected && availableFiles.length > 0 && receivedFiles.length === 0 && downloadingFileIndex === null && (
+        {isConnected && currentFileName === "" && receivedFiles.length === 0 && (
           <div className="space-y-6">
             <div className="relative overflow-hidden bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950 dark:to-emerald-950 p-6 sm:p-8 rounded-xl border-2 border-green-500 dark:border-green-600 shadow-xl">
               <div className="absolute top-0 right-0 w-32 h-32 bg-green-400 dark:bg-green-600 rounded-full blur-3xl opacity-20"></div>
@@ -269,51 +269,13 @@ export function FileReceiver({ onBack, initialRoomCode = "" }: FileReceiverProps
                   Connected Successfully!
                 </p>
                 <p className="text-sm sm:text-base text-green-700 dark:text-green-300 mb-4">
-                  Sender is sharing {availableFiles.length} {availableFiles.length === 1 ? 'file' : 'files'} with you
+                  Waiting for sender to share files...
                 </p>
                 <div className="bg-white/50 dark:bg-black/20 rounded-lg p-3 inline-flex items-center gap-2">
                   <div className="h-2 w-2 bg-green-500 rounded-full animate-pulse"></div>
                   <p className="text-xs sm:text-sm font-medium">Secure P2P connection active</p>
                 </div>
               </div>
-            </div>
-
-            <div className="bg-blue-50 dark:bg-blue-950/50 p-6 rounded-xl border-2 border-blue-200 dark:border-blue-800">
-              <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
-                <FileDown className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                Available Files ({availableFiles.length})
-              </h3>
-              <div className="space-y-3">
-                {availableFiles.map((file) => (
-                  <div key={file.index} className="bg-white dark:bg-slate-900 p-4 rounded-lg border-2 flex items-center justify-between gap-3 hover:border-blue-500 transition-all">
-                    <div className="flex items-center gap-3 flex-1 min-w-0">
-                      <div className="h-12 w-12 rounded-lg bg-blue-100 dark:bg-blue-900 flex items-center justify-center shrink-0">
-                        <FileDown className="h-6 w-6 text-blue-600 dark:text-blue-400" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-sm break-all">{file.name}</p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {(file.size / 1024 / 1024).toFixed(2)} MB
-                        </p>
-                      </div>
-                    </div>
-                    <Button 
-                      onClick={() => requestFileDownload(file.index)} 
-                      size="sm"
-                      className="shrink-0 h-10 px-4"
-                    >
-                      <Download className="h-4 w-4 mr-2" />
-                      Download
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="bg-amber-50 dark:bg-amber-950/50 p-5 rounded-lg border border-amber-200 dark:border-amber-800">
-              <p className="text-xs sm:text-sm text-muted-foreground text-center">
-                💡 <strong>Tip:</strong> Click the download button next to any file to start downloading
-              </p>
             </div>
           </div>
         )}
