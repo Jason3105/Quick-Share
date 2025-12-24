@@ -8,6 +8,9 @@ const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://quicksharep2p.onrender.com'),
+  verification: {
+    google: '54be84ab9e525d21',
+  },
   title: {
     default: 'Quick Share - Free P2P File Transfer | Send Large Files Instantly',
     template: '%s | Quick Share'
