@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import QRCode from "qrcode";
+import Image from "next/image";
 
 interface QRCodeDisplayProps {
   code: string;
@@ -74,14 +75,14 @@ export function QRCodeDisplay({ code }: QRCodeDisplayProps) {
       clearInterval(countdownInterval);
       clearTimeout(rotationTimeout);
     };
-  }, [code]);
+  }, [code, generateToken]);
 
   return (
     <div className="space-y-4">
       <div className="flex justify-center">
         <div className="bg-white p-5 rounded-xl shadow-lg border-2 border-indigo-200 dark:border-indigo-800">
           {qrDataUrl && (
-            <img src={qrDataUrl} alt="QR Code" className="w-64 h-64" />
+            <Image src={qrDataUrl} alt="QR Code" width={256} height={256} className="w-64 h-64" unoptimized />
           )}
         </div>
       </div>

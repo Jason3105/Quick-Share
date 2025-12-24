@@ -6,8 +6,9 @@ export default function robots(): MetadataRoute.Robots {
       {
         userAgent: '*',
         allow: '/',
+        disallow: ['/?room=*', '/*?room=*'],
       },
     ],
-    sitemap: 'https://quickshare.app/sitemap.xml',
+    sitemap: 'https://quicksharep2p.onrender.com/sitemap.xml',
   }
 }

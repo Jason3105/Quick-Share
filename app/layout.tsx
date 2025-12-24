@@ -2,11 +2,12 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
+import { KeepAlive } from "@/components/keep-alive";
 
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://quickshare.app'),
+  metadataBase: new URL('https://quicksharep2p.onrender.com'),
   title: {
     default: 'Quick Share - Free P2P File Transfer | Send Large Files Instantly',
     template: '%s | Quick Share'
@@ -47,7 +48,7 @@ export const metadata: Metadata = {
   openGraph: {
     type: 'website',
     locale: 'en_US',
-    url: 'https://quickshare.app',
+    url: 'https://quicksharep2p.onrender.com',
     title: 'Quick Share - Free P2P File Transfer | Send Large Files Instantly',
     description: 'Send large files instantly with Quick Share. Free, secure, peer-to-peer file sharing using WebRTC. No file size limits, no registration, 100% encrypted.',
     siteName: 'Quick Share',
@@ -87,7 +88,7 @@ export const metadata: Metadata = {
     },
   },
   alternates: {
-    canonical: 'https://quickshare.app',
+    canonical: 'https://quicksharep2p.onrender.com',
   },
   category: 'technology',
 };
@@ -100,6 +101,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={inter.className}>
+        <KeepAlive />
         <ThemeProvider
           attribute="class"
           defaultTheme="system"

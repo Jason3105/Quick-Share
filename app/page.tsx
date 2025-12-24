@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -10,21 +11,33 @@ import { Logo } from "@/components/logo";
 import { Share2, Download, Zap, Shield, Infinity, Lock, Github, CheckCircle2, Users, Globe, Sparkles, ArrowRight, MessageSquare, FileText, Video, Image as ImageIcon, Music } from "lucide-react";
 
 export default function Home() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [mode, setMode] = useState<"send" | "receive" | null>(null);
   const [roomCodeFromUrl, setRoomCodeFromUrl] = useState<string>("");
 
   useEffect(() => {
-    // Check for room code in URL parameters
-    const params = new URLSearchParams(window.location.search);
-    const roomCode = params.get("room");
+    // Block search engines from indexing pages with query parameters
+    const roomCode = searchParams?.get("room");
     
     if (roomCode) {
+      // Add noindex meta tag dynamically for room-specific pages
+      const metaRobots = document.querySelector('meta[name="robots"]');
+      if (metaRobots) {
+        metaRobots.setAttribute('content', 'noindex, nofollow');
+      } else {
+        const meta = document.createElement('meta');
+        meta.name = 'robots';
+        meta.content = 'noindex, nofollow';
+        document.head.appendChild(meta);
+      }
+      
       setRoomCodeFromUrl(roomCode);
       setMode("receive");
       // Clean up URL without page reload
       window.history.replaceState({}, "", window.location.pathname);
     }
-  }, []);
+  }, [searchParams]);
 
   const reset = () => {
     setMode(null);
@@ -57,7 +70,7 @@ export default function Home() {
               "Works on any browser",
               "100% free forever"
             ],
-            "screenshot": "https://quickshare.app/screenshot.png",
+            "screenshot": "https://quicksharep2p.onrender.com/screenshot.png",
             "aggregateRating": {
               "@type": "AggregateRating",
               "ratingValue": "4.9",
@@ -122,11 +135,11 @@ export default function Home() {
                   </p>
                 </div>
                 <div className="flex flex-col sm:flex-row gap-4 justify-center items-center pt-4">
-                  <Button size="lg" className="text-lg px-8 py-6 shadow-lg hover:shadow-xl transition-all" onClick={() => setMode("send")}>
+                  <Button size="lg" className="text-lg px-8 py-6 shadow-lg hover:shadow-xl transition-all" onClick={() => router.push('/send')}>
                     Start Sharing Now
                     <ArrowRight className="ml-2 h-5 w-5" />
                   </Button>
-                  <Button size="lg" variant="outline" className="text-lg px-8 py-6" onClick={() => setMode("receive")}>
+                  <Button size="lg" variant="outline" className="text-lg px-8 py-6" onClick={() => router.push('/receive')}>
                     Receive Files
                   </Button>
                 </div>
@@ -257,7 +270,7 @@ export default function Home() {
 
             {/* Main Action Cards */}
             <div className="grid sm:grid-cols-2 gap-4 sm:gap-6">
-              <Card className="p-6 sm:p-8 hover:bg-accent transition-all cursor-pointer border-2" onClick={() => setMode("send")}>
+              <Card className="p-6 sm:p-8 hover:bg-accent transition-all cursor-pointer border-2" onClick={() => router.push('/send')}>
                 <div className="flex flex-col items-center text-center space-y-3 sm:space-y-4">
                   <div className="h-16 w-16 sm:h-20 sm:w-20 rounded-full bg-foreground flex items-center justify-center">
                     <Share2 className="h-8 w-8 sm:h-10 sm:w-10 text-background" />
@@ -272,7 +285,7 @@ export default function Home() {
                 </div>
               </Card>
 
-              <Card className="p-6 sm:p-8 hover:bg-accent transition-all cursor-pointer border-2" onClick={() => setMode("receive")}>
+              <Card className="p-6 sm:p-8 hover:bg-accent transition-all cursor-pointer border-2" onClick={() => router.push('/receive')}>
                 <div className="flex flex-col items-center text-center space-y-3 sm:space-y-4">
                   <div className="h-16 w-16 sm:h-20 sm:w-20 rounded-full bg-foreground flex items-center justify-center">
                     <Download className="h-8 w-8 sm:h-10 sm:w-10 text-background" />
@@ -455,7 +468,7 @@ export default function Home() {
                     <MessageSquare className="h-5 w-5 text-blue-600 dark:text-blue-400 shrink-0 mt-1" />
                     <div>
                       <h4 className="font-semibold mb-1">How long do links stay active?</h4>
-                      <p className="text-sm text-muted-foreground">Links are active as long as the sender's browser tab remains open. Close the tab to end the session.</p>
+                      <p className="text-sm text-muted-foreground">Links are active as long as the sender&apos;s browser tab remains open. Close the tab to end the session.</p>
                     </div>
                   </div>
                 </div>
@@ -473,10 +486,8 @@ export default function Home() {
           </>
         )}
 
-        {mode === "send" && <FileSender onBack={reset} />}
-        {mode === "receive" && <FileReceiver onBack={reset} initialRoomCode={roomCodeFromUrl} />}
-
-        <footer className="mt-12 sm:mt-16 pt-6 sm:pt-8 border-t">
+        {!mode && (
+          <footer className="mt-12 sm:mt-16 pt-6 sm:pt-8 border-t">
           <div className="text-center space-y-3 sm:space-y-4">
             <div className="flex flex-wrap justify-center gap-2 sm:gap-3 text-xs sm:text-sm text-muted-foreground px-4">
               <span className="flex items-center gap-1">
@@ -499,6 +510,7 @@ export default function Home() {
             </p>
           </div>
         </footer>
+        )}
       </div>
     </main>
   );
