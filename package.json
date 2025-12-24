@@ -3,11 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "concurrently \"next dev\" \"node server.js\"",
-    "dev:client": "next dev",
-    "dev:server": "node server.js",
+    "dev": "node server-combined.js",
+    "dev:old": "concurrently \"next dev\" \"node server.js\"",
     "build": "next build",
-    "start": "next start",
+    "start": "NODE_ENV=production node server-combined.js",
     "lint": "next lint"
   },
   "dependencies": {

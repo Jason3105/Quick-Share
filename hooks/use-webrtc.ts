@@ -28,7 +28,7 @@ export function useWebRTC() {
 
   // Initialize Socket.io connection
   useEffect(() => {
-    const socketInstance = io(process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:3001", {
+    const socketInstance = io(process.env.NEXT_PUBLIC_SOCKET_URL || window.location.origin, {
       transports: ["websocket", "polling"],
     });
 
