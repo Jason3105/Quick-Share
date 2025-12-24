@@ -129,7 +129,7 @@ export function QRScanner({ onScan, onClose }: QRScannerProps) {
         streamRef.current.getTracks().forEach(track => track.stop());
       }
     };
-  }, [onScan]);
+  }, [onScan, onClose]);
 
   const handleClose = () => {
     // Stop all video tracks
