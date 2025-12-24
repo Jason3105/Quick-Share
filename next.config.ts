@@ -5,11 +5,6 @@ const nextConfig: NextConfig = {
   compress: true,
   poweredByHeader: false,
   generateEtags: true,
-  
-  // Performance optimization
-  experimental: {
-    optimizeCss: true,
-  },
 };
 
 export default nextConfig;

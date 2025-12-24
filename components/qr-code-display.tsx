@@ -13,14 +13,14 @@ export function QRCodeDisplay({ code }: QRCodeDisplayProps) {
   const [secondsLeft, setSecondsLeft] = useState<number>(10);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  // Generate time-based token that rotates every 10 seconds
-  const generateToken = () => {
-    const currentTime = Date.now();
-    const roundedTime = Math.floor(currentTime / 10000) * 10000; // Round to 10s
-    return `${code}:${roundedTime}`;
-  };
-
   useEffect(() => {
+    // Generate time-based token that rotates every 10 seconds
+    const generateToken = () => {
+      const currentTime = Date.now();
+      const roundedTime = Math.floor(currentTime / 10000) * 10000; // Round to 10s
+      return `${code}:${roundedTime}`;
+    };
+
     const updateQR = async () => {
       const token = generateToken();
       const url = `${window.location.origin}?join=${token}`;
@@ -75,7 +75,7 @@ export function QRCodeDisplay({ code }: QRCodeDisplayProps) {
       clearInterval(countdownInterval);
       clearTimeout(rotationTimeout);
     };
-  }, [code, generateToken]);
+  }, [code]);
 
   return (
     <div className="space-y-4">
