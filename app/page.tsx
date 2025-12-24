@@ -4,11 +4,10 @@ import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ThemeToggle } from "@/components/theme-toggle";
 import { FileSender } from "@/components/file-sender";
 import { FileReceiver } from "@/components/file-receiver";
 import { Logo } from "@/components/logo";
-import { Share2, Download, Zap, Shield, Infinity, Lock, Github, CheckCircle2, Users, Globe, Sparkles, ArrowRight, MessageSquare, FileText, Video, Image as ImageIcon, Music } from "lucide-react";
+import { Share2, Download, Zap, Shield, Infinity, Lock, CheckCircle2, Users, Globe, Sparkles, ArrowRight, MessageSquare, FileText, Video, Image as ImageIcon, Music } from "lucide-react";
 
 function HomeContent() {
   const router = useRouter();
@@ -17,27 +16,13 @@ function HomeContent() {
   const [roomCodeFromUrl, setRoomCodeFromUrl] = useState<string>("");
 
   useEffect(() => {
-    // Block search engines from indexing pages with query parameters
     const roomCode = searchParams?.get("room");
     
     if (roomCode) {
-      // Add noindex meta tag dynamically for room-specific pages
-      const metaRobots = document.querySelector('meta[name="robots"]');
-      if (metaRobots) {
-        metaRobots.setAttribute('content', 'noindex, nofollow');
-      } else {
-        const meta = document.createElement('meta');
-        meta.name = 'robots';
-        meta.content = 'noindex, nofollow';
-        document.head.appendChild(meta);
-      }
-      
-      setRoomCodeFromUrl(roomCode);
-      setMode("receive");
-      // Clean up URL without page reload
-      window.history.replaceState({}, "", window.location.pathname);
+      // Redirect to /receive page with room code as query parameter
+      router.push(`/receive?room=${roomCode}`);
     }
-  }, [searchParams]);
+  }, [searchParams, router]);
 
   const reset = () => {
     setMode(null);
@@ -79,34 +64,6 @@ function HomeContent() {
           })
         }}
       />
-      {/* Navbar */}
-      <nav className="border-b bg-card sticky top-0 z-50">
-        <div className="container mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex justify-between items-center">
-            <div className="flex items-center gap-2 sm:gap-3">
-              <Logo className="h-8 w-8 sm:h-10 sm:w-10 text-foreground" />
-              <div>
-                <h1 className="text-lg sm:text-2xl font-bold text-foreground">
-                  Quick Share
-                </h1>
-                <p className="text-xs text-muted-foreground hidden sm:block">P2P File Transfer</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2 sm:gap-4">
-              <a 
-                href="https://github.com/Jason3105/Quick-Share" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="text-muted-foreground hover:text-foreground transition-colors"
-                aria-label="View source on GitHub"
-              >
-                <Github className="h-5 w-5" />
-              </a>
-              <ThemeToggle />
-            </div>
-          </div>
-        </div>
-      </nav>
 
       <div className="container mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-12">
         {!mode && (

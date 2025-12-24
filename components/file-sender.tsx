@@ -64,7 +64,7 @@ export function FileSender({ onBack }: FileSenderProps) {
   };
 
   const copyShareLink = () => {
-    const shareLink = `${window.location.origin}?room=${roomCode}`;
+    const shareLink = `${window.location.origin}/receive?room=${roomCode}`;
     navigator.clipboard.writeText(shareLink);
     setLinkCopied(true);
     setTimeout(() => setLinkCopied(false), 2000);
@@ -201,7 +201,7 @@ export function FileSender({ onBack }: FileSenderProps) {
               <div className="flex gap-3">
                 <div className="flex-1 bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-950 dark:to-pink-950 p-5 sm:p-6 rounded-xl overflow-x-auto scrollbar-hide border-2 border-purple-200 dark:border-purple-800 shadow-lg min-h-[80px] flex items-center">
                   <code className="text-xs sm:text-sm font-mono whitespace-nowrap w-full text-center">
-                    {typeof window !== 'undefined' && `${window.location.origin}?room=${roomCode}`}
+                    {typeof window !== 'undefined' && `${window.location.origin}/receive?room=${roomCode}`}
                   </code>
                 </div>
                 <Button 

@@ -23,7 +23,7 @@ export function QRCodeDisplay({ code }: QRCodeDisplayProps) {
 
     const updateQR = async () => {
       const token = generateToken();
-      const url = `${window.location.origin}?join=${token}`;
+      const url = `${window.location.origin}/receive?join=${token}`;
       
       try {
         const dataUrl = await QRCode.toDataURL(url, {
