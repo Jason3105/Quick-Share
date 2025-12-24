@@ -123,10 +123,17 @@ export function FileReceiver({ onBack, initialRoomCode = "" }: FileReceiverProps
   
   // Reset state to allow retry if connection fails
   const handleRetry = () => {
+    console.log("Retrying connection...");
     setHasJoinedRoom(false);
     hasAttemptedJoin.current = false;
     isProcessingQRScan.current = false;
-    setCode("");
+    // Keep the code so user doesn't have to re-enter
+    if (code.trim()) {
+      // Small delay to ensure state is clean
+      setTimeout(() => {
+        handleJoin();
+      }, 200);
+    }
   };
 
   const progress = transferProgress;
@@ -204,7 +211,7 @@ export function FileReceiver({ onBack, initialRoomCode = "" }: FileReceiverProps
                       <Loader2 className="h-3 w-3 animate-spin" />
                       <span className="text-xs font-medium">Establishing secure connection...</span>
                     </div>
-                    {connectionState.includes("timeout") && (
+                    {(connectionState.includes("timeout") || connectionState.includes("failed") || connectionState.includes("disconnected")) && (
                       <Button 
                         variant="outline" 
                         size="sm" 
@@ -212,7 +219,7 @@ export function FileReceiver({ onBack, initialRoomCode = "" }: FileReceiverProps
                         className="mt-2 text-xs"
                       >
                         <AlertCircle className="h-3 w-3 mr-1" />
-                        Try Again
+                        Retry Connection
                       </Button>
                     )}
                   </>

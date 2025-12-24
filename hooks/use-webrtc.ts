@@ -458,17 +458,20 @@ export function useWebRTC() {
       peerConnectionRef.current = pc;
       setPeerConnection(pc);
 
-      // Request offer
-      console.log("📨 Requesting offer");
-      socket.emit("request-offer", { roomId: code });
+      // Small delay to ensure peer connection is fully initialized before requesting offer
+      setTimeout(() => {
+        console.log("📨 Requesting offer");
+        socket.emit("request-offer", { roomId: code });
+      }, 500);
       
       // Set a timeout for connection establishment
       const connectionTimeout = setTimeout(() => {
         if (pc.connectionState !== "connected") {
-          console.error("⏱️ Connection timeout - failed to establish connection within 15 seconds");
+          console.error("⏱️ Connection timeout - failed to establish connection within 20 seconds");
           setConnectionState("Connection timeout - Please try again");
+          // Don't close the peer connection, allow retry
         }
-      }, 15000); // 15 seconds
+      }, 20000); // 20 seconds
       
       // Clear timeout if connection succeeds
       pc.addEventListener("connectionstatechange", () => {
@@ -476,6 +479,9 @@ export function useWebRTC() {
           clearTimeout(connectionTimeout);
         }
       }, { once: true });
+    } else {
+      console.error("❌ Socket not connected, cannot join room");
+      setConnectionState("Not connected to server");
     }
   }, [socket]);
 
