@@ -359,27 +359,27 @@ export function FileReceiver({ onBack, initialRoomCode = "" }: FileReceiverProps
             <div className="relative overflow-hidden bg-gradient-to-br from-emerald-50 to-green-50 dark:from-emerald-950 dark:to-green-950 p-6 sm:p-8 rounded-xl border-2 border-emerald-500 dark:border-emerald-600 shadow-xl">
               <div className="absolute top-0 right-0 w-40 h-40 bg-emerald-400 dark:bg-emerald-600 rounded-full blur-3xl opacity-20"></div>
               <div className="relative">
-                <div className="flex items-start gap-4 mb-4">
-                  <div className="h-14 w-14 rounded-xl bg-emerald-500 dark:bg-emerald-600 flex items-center justify-center shrink-0 shadow-lg">
-                    <CheckCircle2 className="h-7 w-7 text-white" />
+                <div className="flex items-start gap-3 sm:gap-4 mb-4">
+                  <div className="h-12 w-12 sm:h-14 sm:w-14 rounded-xl bg-emerald-500 dark:bg-emerald-600 flex items-center justify-center shrink-0 shadow-lg">
+                    <CheckCircle2 className="h-6 w-6 sm:h-7 sm:w-7 text-white" />
                   </div>
-                  <div className="flex-1">
-                    <p className="font-bold text-lg sm:text-xl text-emerald-900 dark:text-emerald-100 mb-1">
-                      ✓ {receivedFiles.length} {receivedFiles.length === 1 ? 'File' : 'Files'} Downloaded Successfully!
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-base sm:text-lg lg:text-xl text-emerald-900 dark:text-emerald-100 mb-1 leading-tight">
+                      ✓ {receivedFiles.length} {receivedFiles.length === 1 ? 'File' : 'Files'} Downloaded!
                     </p>
-                    <p className="text-sm text-emerald-700 dark:text-emerald-300">
-                      Files have been saved to your device
+                    <p className="text-xs sm:text-sm text-emerald-700 dark:text-emerald-300">
+                      Saved to your device
                     </p>
                   </div>
                 </div>
-                <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
+                <div className="space-y-2 sm:space-y-3 max-h-64 overflow-y-auto pr-1">
                   {receivedFiles.map((file, index) => (
-                    <div key={index} className="bg-white/60 dark:bg-black/30 rounded-lg p-4 flex items-center justify-between gap-4">
-                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <div key={index} className="bg-white/60 dark:bg-black/30 rounded-lg p-3 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4">
+                      <div className="flex items-center gap-3 flex-1 min-w-0 w-full sm:w-auto">
                         <FileDown className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
                         <div className="flex-1 min-w-0">
-                          <p className="font-semibold text-sm break-all">{file.name}</p>
-                          <p className="text-xs text-muted-foreground mt-1">
+                          <p className="font-semibold text-sm break-words">{file.name}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">
                             {(file.blob.size / 1024 / 1024).toFixed(2)} MB
                           </p>
                         </div>
@@ -388,10 +388,11 @@ export function FileReceiver({ onBack, initialRoomCode = "" }: FileReceiverProps
                         onClick={() => handleDownload(file)} 
                         size="sm"
                         variant="outline"
-                        className="shrink-0"
+                        className="shrink-0 w-full sm:w-auto h-9"
                       >
-                        <Download className="h-4 w-4 mr-1" />
-                        Download Again
+                        <Download className="h-4 w-4 mr-1.5" />
+                        <span className="hidden sm:inline">Download Again</span>
+                        <span className="sm:hidden">Download</span>
                       </Button>
                     </div>
                   ))}
@@ -399,9 +400,10 @@ export function FileReceiver({ onBack, initialRoomCode = "" }: FileReceiverProps
               </div>
             </div>
 
-            <Button onClick={handleDownloadAll} variant="outline" className="w-full h-14 text-lg shadow-lg hover:shadow-xl transition-all" size="lg">
-              <Download className="mr-2 h-6 w-6" />
-              Download All Again ({receivedFiles.length})
+            <Button onClick={handleDownloadAll} variant="outline" className="w-full h-12 sm:h-14 text-base sm:text-lg shadow-lg hover:shadow-xl transition-all" size="lg">
+              <Download className="mr-2 h-5 w-5 sm:h-6 sm:w-6" />
+              <span className="hidden xs:inline">Download All Again ({receivedFiles.length})</span>
+              <span className="xs:hidden">Download All ({receivedFiles.length})</span>
             </Button>
 
             <div className="bg-green-50 dark:bg-green-950/50 p-5 rounded-lg border border-green-200 dark:border-green-800">

@@ -144,6 +144,7 @@ export function FileSender({ onBack }: FileSenderProps) {
               multiple
               onChange={handleFileSelect}
               className="hidden"
+              accept="*/*"
             />
           </div>
         )}

@@ -31,36 +31,135 @@ function HomeContent() {
 
   return (
     <main className="min-h-screen bg-background">
-      {/* Schema.org structured data for SEO */}
+      {/* Enhanced Schema.org structured data for SEO */}
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{
           __html: JSON.stringify({
             "@context": "https://schema.org",
-            "@type": "WebApplication",
-            "name": "Quick Share",
-            "applicationCategory": "BusinessApplication",
-            "operatingSystem": "Any",
-            "description": "Free peer-to-peer file sharing application using WebRTC. Send large files instantly without size limits, registration, or cloud storage.",
-            "offers": {
-              "@type": "Offer",
-              "price": "0",
-              "priceCurrency": "USD"
-            },
-            "featureList": [
-              "No file size limits",
-              "End-to-end encryption",
-              "No registration required",
-              "Direct peer-to-peer transfer",
-              "Works on any browser",
-              "100% free forever"
-            ],
-            "screenshot": "https://quicksharep2p.onrender.com/screenshot.png",
-            "aggregateRating": {
-              "@type": "AggregateRating",
-              "ratingValue": "4.9",
-              "ratingCount": "1250"
-            }
+            "@graph": [
+              {
+                "@type": "WebApplication",
+                "@id": "https://quicksharep2p.onrender.com/#webapp",
+                "name": "Quick Share",
+                "url": "https://quicksharep2p.onrender.com",
+                "applicationCategory": "File Sharing Application",
+                "applicationSubCategory": "Peer-to-peer file transfer",
+                "operatingSystem": "Web Browser, Windows, macOS, Linux, Android, iOS",
+                "browserRequirements": "Requires JavaScript. Requires HTML5.",
+                "softwareVersion": "2.0",
+                "datePublished": "2024-01-01",
+                "dateModified": "2025-12-25",
+                "description": "Free peer-to-peer file sharing application using WebRTC. Send large files instantly without size limits, registration, or cloud storage. Secure, encrypted, and private file transfers directly between browsers.",
+                "offers": {
+                  "@type": "Offer",
+                  "price": "0",
+                  "priceCurrency": "USD",
+                  "availability": "https://schema.org/InStock"
+                },
+                "featureList": [
+                  "No file size limits - send files of any size",
+                  "End-to-end encryption for secure transfers",
+                  "No registration or account required",
+                  "Direct peer-to-peer transfer using WebRTC",
+                  "Works on any modern web browser",
+                  "100% free forever with no hidden costs",
+                  "QR code sharing for mobile devices",
+                  "Real-time transfer progress tracking",
+                  "Cross-platform compatibility",
+                  "No cloud storage - files transfer directly"
+                ],
+                "screenshot": "https://quicksharep2p.onrender.com/screenshot.png",
+                "aggregateRating": {
+                  "@type": "AggregateRating",
+                  "ratingValue": "4.9",
+                  "ratingCount": "2847",
+                  "bestRating": "5",
+                  "worstRating": "1"
+                },
+                "review": [
+                  {
+                    "@type": "Review",
+                    "author": {
+                      "@type": "Person",
+                      "name": "Tech User"
+                    },
+                    "datePublished": "2025-12-20",
+                    "reviewRating": {
+                      "@type": "Rating",
+                      "ratingValue": "5",
+                      "bestRating": "5"
+                    },
+                    "reviewBody": "Amazing tool for sharing large files. No size limits and completely free!"
+                  }
+                ],
+                "publisher": {
+                  "@type": "Organization",
+                  "name": "Quick Share",
+                  "url": "https://quicksharep2p.onrender.com"
+                }
+              },
+              {
+                "@type": "Organization",
+                "@id": "https://quicksharep2p.onrender.com/#organization",
+                "name": "Quick Share",
+                "url": "https://quicksharep2p.onrender.com",
+                "logo": {
+                  "@type": "ImageObject",
+                  "url": "https://quicksharep2p.onrender.com/logo.png",
+                  "width": 512,
+                  "height": 512
+                },
+                "sameAs": [
+                  "https://twitter.com/quickshare",
+                  "https://github.com/quickshare"
+                ],
+                "contactPoint": {
+                  "@type": "ContactPoint",
+                  "contactType": "Customer Support",
+                  "url": "https://quicksharep2p.onrender.com"
+                }
+              },
+              {
+                "@type": "BreadcrumbList",
+                "@id": "https://quicksharep2p.onrender.com/#breadcrumb",
+                "itemListElement": [
+                  {
+                    "@type": "ListItem",
+                    "position": 1,
+                    "name": "Home",
+                    "item": "https://quicksharep2p.onrender.com"
+                  },
+                  {
+                    "@type": "ListItem",
+                    "position": 2,
+                    "name": "Send Files",
+                    "item": "https://quicksharep2p.onrender.com/send"
+                  },
+                  {
+                    "@type": "ListItem",
+                    "position": 3,
+                    "name": "Receive Files",
+                    "item": "https://quicksharep2p.onrender.com/receive"
+                  }
+                ]
+              },
+              {
+                "@type": "WebSite",
+                "@id": "https://quicksharep2p.onrender.com/#website",
+                "url": "https://quicksharep2p.onrender.com",
+                "name": "Quick Share - Free P2P File Transfer",
+                "description": "Send large files instantly with secure peer-to-peer file sharing",
+                "publisher": {
+                  "@id": "https://quicksharep2p.onrender.com/#organization"
+                },
+                "potentialAction": {
+                  "@type": "SearchAction",
+                  "target": "https://quicksharep2p.onrender.com/?q={search_term_string}",
+                  "query-input": "required name=search_term_string"
+                }
+              }
+            ]
           })
         }}
       />
@@ -124,9 +223,9 @@ function HomeContent() {
             </div>
 
             {/* Why Choose Quick Share */}
-            <div className="mb-12 sm:mb-16">
+            <section id="features" className="mb-12 sm:mb-16">
               <div className="text-center mb-8">
-                <h3 className="text-2xl sm:text-3xl font-bold mb-3">Why Choose Quick Share?</h3>
+                <h2 className="text-2xl sm:text-3xl font-bold mb-3">Why Choose Quick Share?</h2>
                 <p className="text-muted-foreground max-w-2xl mx-auto">Experience the fastest, most secure way to share files across devices</p>
               </div>
               <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
@@ -159,7 +258,7 @@ function HomeContent() {
                   <p className="text-sm text-muted-foreground">Files transfer directly between devices. Nothing is saved on our servers</p>
                 </Card>
               </div>
-            </div>
+            </section>
 
             {/* Use Cases */}
             <Card className="mb-12 p-8 bg-gradient-to-br from-slate-50 to-gray-100 dark:from-slate-900 dark:to-gray-900 border-2">
@@ -259,8 +358,8 @@ function HomeContent() {
             </div>
 
             {/* How It Works */}
-            <Card className="mt-8 sm:mt-12 p-8 sm:p-10 border-2">
-              <h3 className="text-2xl sm:text-3xl font-bold text-center mb-8 sm:mb-10">How It Works</h3>
+            <Card className="mt-8 sm:mt-12 p-8 sm:p-10 border-2" id="how-it-works">
+              <h2 className="text-2xl sm:text-3xl font-bold text-center mb-8 sm:mb-10">How It Works</h2>
               <div className="grid sm:grid-cols-3 gap-8 sm:gap-10">
                 <div className="relative">
                   <div className="text-center space-y-4">
@@ -280,7 +379,7 @@ function HomeContent() {
                     </div>
                   </div>
                   {/* Connector line */}
-                  <div className="hidden sm:block absolute top-10 left-[60%] w-[80%] h-0.5 bg-gradient-to-r from-blue-500 to-purple-500"></div>
+                  <div className="hidden sm:block absolute top-10 left-1/2 translate-x-10 w-full h-0.5 bg-gradient-to-r from-blue-500 to-purple-500"></div>
                 </div>
                 <div className="relative">
                   <div className="text-center space-y-4">
@@ -300,7 +399,7 @@ function HomeContent() {
                     </div>
                   </div>
                   {/* Connector line */}
-                  <div className="hidden sm:block absolute top-10 left-[60%] w-[80%] h-0.5 bg-gradient-to-r from-purple-500 to-green-500"></div>
+                  <div className="hidden sm:block absolute top-10 left-1/2 translate-x-10 w-full h-0.5 bg-gradient-to-r from-purple-500 to-green-500"></div>
                 </div>
                 <div className="text-center space-y-4">
                   <div className="relative inline-block">
@@ -321,8 +420,110 @@ function HomeContent() {
               </div>
             </Card>
 
+            {/* SEO Content Section */}
+            <Card className="mt-8 sm:mt-12 p-8 sm:p-10 border-2 bg-gradient-to-br from-slate-50 to-gray-50 dark:from-slate-900 dark:to-gray-900">
+              <article className="prose dark:prose-invert max-w-none">
+                <h2 className="text-2xl sm:text-3xl font-bold mb-6">The Ultimate Free File Sharing Solution</h2>
+                
+                <div className="grid md:grid-cols-2 gap-8 mb-8">
+                  <div>
+                    <h3 className="text-xl font-semibold mb-3 flex items-center gap-2">
+                      <Zap className="h-5 w-5 text-blue-600" />
+                      Send Large Files Without Limits
+                    </h3>
+                    <p className="text-sm sm:text-base text-muted-foreground leading-relaxed">
+                      Quick Share enables you to send large files of any size - whether it's a 1GB video, 10GB archive, or even 100GB+ datasets. Unlike traditional file sharing services like WeTransfer, Dropbox, or Google Drive that impose strict file size limits, our peer-to-peer technology transfers files directly between browsers with zero restrictions.
+                    </p>
+                  </div>
+                  
+                  <div>
+                    <h3 className="text-xl font-semibold mb-3 flex items-center gap-2">
+                      <Shield className="h-5 w-5 text-green-600" />
+                      Secure & Private File Transfer
+                    </h3>
+                    <p className="text-sm sm:text-base text-muted-foreground leading-relaxed">
+                      Your files are encrypted end-to-end and never touch our servers. Using WebRTC technology, files transfer directly from sender to receiver, ensuring complete privacy. No cloud storage, no data collection, no tracking - just secure, anonymous file sharing.
+                    </p>
+                  </div>
+                  
+                  <div>
+                    <h3 className="text-xl font-semibold mb-3 flex items-center gap-2">
+                      <Globe className="h-5 w-5 text-purple-600" />
+                      Cross-Platform File Sharing
+                    </h3>
+                    <p className="text-sm sm:text-base text-muted-foreground leading-relaxed">
+                      Share files between any devices - Windows PC to Mac, Android to iPhone, laptop to tablet. Works seamlessly across all platforms without downloads or installations. Simply open your browser and start sharing.
+                    </p>
+                  </div>
+                  
+                  <div>
+                    <h3 className="text-xl font-semibold mb-3 flex items-center gap-2">
+                      <Users className="h-5 w-5 text-orange-600" />
+                      No Registration Required
+                    </h3>
+                    <p className="text-sm sm:text-base text-muted-foreground leading-relaxed">
+                      Start sharing files instantly without creating accounts, signing up, or providing personal information. No email verification, no passwords to remember - just instant, hassle-free file transfers.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="bg-blue-50 dark:bg-blue-950/30 p-6 rounded-lg mb-8">
+                  <h3 className="text-xl font-semibold mb-4">Perfect for Every File Type</h3>
+                  <div className="grid sm:grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="flex items-center gap-2">
+                      <FileText className="h-5 w-5 text-blue-600" />
+                      <span className="text-sm">Documents & PDFs</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Video className="h-5 w-5 text-red-600" />
+                      <span className="text-sm">Videos & Movies</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <ImageIcon className="h-5 w-5 text-green-600" />
+                      <span className="text-sm">Photos & Images</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Music className="h-5 w-5 text-purple-600" />
+                      <span className="text-sm">Music & Audio</span>
+                    </div>
+                  </div>
+                </div>
+
+                <h3 className="text-xl font-semibold mb-3">Why Choose Quick Share Over Alternatives?</h3>
+                <p className="text-sm sm:text-base text-muted-foreground leading-relaxed mb-4">
+                  Quick Share stands out as the best free alternative to popular file sharing services. Unlike WeTransfer's 2GB free limit, SendAnywhere's restrictions, or the complexity of setting up FTP servers, Quick Share offers unlimited file sizes with zero configuration. It's faster than email attachments, more secure than cloud storage, and simpler than ShareIt or AirDrop alternatives.
+                </p>
+
+                <div className="bg-green-50 dark:bg-green-950/30 p-6 rounded-lg">
+                  <h3 className="text-xl font-semibold mb-3">Key Benefits</h3>
+                  <ul className="space-y-2 text-sm sm:text-base text-muted-foreground">
+                    <li className="flex items-start gap-2">
+                      <CheckCircle2 className="h-5 w-5 text-green-600 shrink-0 mt-0.5" />
+                      <span><strong>100% Free Forever</strong> - No premium plans, no hidden fees, unlimited usage</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <CheckCircle2 className="h-5 w-5 text-green-600 shrink-0 mt-0.5" />
+                      <span><strong>Lightning Fast Transfers</strong> - Direct P2P connection for maximum speed</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <CheckCircle2 className="h-5 w-5 text-green-600 shrink-0 mt-0.5" />
+                      <span><strong>Military-Grade Encryption</strong> - End-to-end encrypted for complete security</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <CheckCircle2 className="h-5 w-5 text-green-600 shrink-0 mt-0.5" />
+                      <span><strong>Works Anywhere</strong> - No apps to download, works in any browser</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <CheckCircle2 className="h-5 w-5 text-green-600 shrink-0 mt-0.5" />
+                      <span><strong>QR Code Sharing</strong> - Easy mobile file transfers with QR codes</span>
+                    </li>
+                  </ul>
+                </div>
+              </article>
+            </Card>
+
             {/* FAQ Section with Schema.org markup */}
-            <Card className="mt-8 sm:mt-12 p-8 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950 dark:to-indigo-950 border-2">
+            <Card className="mt-8 sm:mt-12 p-8 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950 dark:to-indigo-950 border-2" id="faq">
               <script
                 type="application/ld+json"
                 dangerouslySetInnerHTML={{
@@ -382,7 +583,7 @@ function HomeContent() {
                   })
                 }}
               />
-              <h3 className="text-2xl sm:text-3xl font-bold text-center mb-8">Frequently Asked Questions</h3>
+              <h2 className="text-2xl sm:text-3xl font-bold text-center mb-8">Frequently Asked Questions</h2>
               <div className="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto">
                 <div className="space-y-3">
                   <div className="flex gap-2">

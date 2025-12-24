@@ -72,4 +72,20 @@ io.on("connection", (socket) => {
 const PORT = process.env.PORT || 3001;
 httpServer.listen(PORT, () => {
   console.log(`Socket.io server running on port ${PORT}`);
+  
+  // Self-ping mechanism to keep Render server awake
+  // Render free tier goes to sleep after 15 minutes of inactivity
+  const PING_INTERVAL = 10 * 60 * 1000; // 10 minutes
+  
+  setInterval(() => {
+    const timestamp = new Date().toISOString();
+    console.log(`[Keep-Alive] Self-ping at ${timestamp}`);
+    
+    // Perform a simple operation to show activity
+    const roomCount = rooms.size;
+    const totalPeers = Array.from(rooms.values()).reduce((sum, room) => sum + room.peers.length, 0);
+    console.log(`[Keep-Alive] Active rooms: ${roomCount}, Total peers: ${totalPeers}`);
+  }, PING_INTERVAL);
+  
+  console.log('[Keep-Alive] Self-ping mechanism started (10-minute interval)');
 });

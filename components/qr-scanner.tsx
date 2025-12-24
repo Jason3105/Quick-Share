@@ -23,6 +23,30 @@ export function QRScanner({ onScan, onClose }: QRScannerProps) {
 
     const startScanning = async () => {
       try {
+        // First, explicitly request camera permissions using getUserMedia
+        // This ensures the permission prompt appears on all devices
+        let permissionStream: MediaStream | null = null;
+        try {
+          permissionStream = await navigator.mediaDevices.getUserMedia({ 
+            video: { facingMode: { ideal: "environment" } } 
+          });
+        } catch (permError: any) {
+          console.error("Permission error:", permError);
+          if (permError.name === "NotAllowedError" || permError.name === "PermissionDeniedError") {
+            setError("Camera permission denied. Please grant camera access in your browser settings.");
+          } else if (permError.name === "NotFoundError") {
+            setError("No camera found on this device");
+          } else {
+            setError("Failed to access camera. Please grant camera permissions.");
+          }
+          return;
+        }
+
+        // Stop the permission stream as we'll use ZXing's stream
+        if (permissionStream) {
+          permissionStream.getTracks().forEach(track => track.stop());
+        }
+
         const videoInputDevices = await BrowserMultiFormatReader.listVideoInputDevices();
         
         if (videoInputDevices.length === 0) {

@@ -13,35 +13,92 @@ export const metadata: Metadata = {
     google: '54be84ab9e525d21',
   },
   title: {
-    default: 'Quick Share - Free P2P File Transfer | Send Large Files Instantly',
-    template: '%s | Quick Share'
+    default: 'Quick Share - Free P2P File Transfer | Send Large Files Instantly & Securely',
+    template: '%s | Quick Share - Secure File Sharing'
   },
-  description: 'Send large files instantly with Quick Share - Free, secure, peer-to-peer file sharing using WebRTC. No file size limits, no registration, 100% encrypted. Share documents, videos, photos directly browser-to-browser.',
+  description: 'Send large files instantly with Quick Share - 100% free, secure peer-to-peer file sharing using WebRTC. No file size limits, no registration, end-to-end encrypted. Share documents, videos, photos, and more directly browser-to-browser. Fast, private, and unlimited file transfers.',
   keywords: [
+    // Core file sharing keywords
     'file sharing',
     'p2p file transfer',
-    'send large files',
+    'peer to peer file sharing',
     'webrtc file sharing',
-    'peer to peer',
+    'send large files',
+    'send big files',
     'free file transfer',
     'secure file sharing',
-    'no file size limit',
     'encrypted file transfer',
     'instant file sharing',
-    'browser file sharing',
-    'send files online',
-    'file transfer online',
-    'share files free',
-    'quick share',
-    'fast file transfer',
+    
+    // File size and limits
+    'no file size limit',
+    'unlimited file sharing',
+    'large file transfer',
+    'send files up to 10gb',
+    'send files up to 100gb',
+    'transfer big files',
+    
+    // Security and privacy
+    'end to end encryption',
     'private file sharing',
-    'no registration file sharing',
+    'secure file transfer',
+    'encrypted file sharing',
+    'anonymous file sharing',
+    'no cloud storage',
     'direct file transfer',
+    
+    // Use cases and file types
     'share videos online',
     'share photos online',
-    'send documents online'
+    'send documents online',
+    'transfer files between computers',
+    'share files between devices',
+    'send files mobile to pc',
+    'share pdf files',
+    'transfer video files',
+    'send compressed files',
+    'share zip files',
+    
+    // Competitive keywords
+    'wetransfer alternative',
+    'dropbox alternative',
+    'google drive alternative',
+    'filesend alternative',
+    'sendanywhere alternative',
+    'airdrop alternative',
+    'shareit alternative',
+    
+    // Browser and platform
+    'browser file sharing',
+    'online file transfer',
+    'web based file sharing',
+    'file sharing no download',
+    'file sharing no installation',
+    'cross platform file sharing',
+    
+    // Convenience features
+    'no registration file sharing',
+    'no account needed',
+    'quick file transfer',
+    'fast file sharing',
+    'easy file sharing',
+    'simple file transfer',
+    'qr code file sharing',
+    
+    // Technology
+    'webrtc',
+    'peer to peer',
+    'p2p transfer',
+    'direct transfer',
+    'browser to browser',
+    
+    // Brand
+    'quick share',
+    'quickshare',
+    'quick share p2p',
+    'quick file share'
   ],
-  authors: [{ name: 'Quick Share Team' }],
+  authors: [{ name: 'Quick Share Team', url: 'https://quicksharep2p.onrender.com' }],
   creator: 'Quick Share',
   publisher: 'Quick Share',
   formatDetection: {
@@ -52,23 +109,26 @@ export const metadata: Metadata = {
   openGraph: {
     type: 'website',
     locale: 'en_US',
+    alternateLocale: ['es_ES', 'fr_FR', 'de_DE', 'ja_JP', 'zh_CN'],
     url: 'https://quicksharep2p.onrender.com',
-    title: 'Quick Share - Free P2P File Transfer | Send Large Files Instantly',
-    description: 'Send large files instantly with Quick Share. Free, secure, peer-to-peer file sharing using WebRTC. No file size limits, no registration, 100% encrypted.',
+    title: 'Quick Share - Free P2P File Transfer | Send Large Files Instantly & Securely',
+    description: 'Send large files instantly with Quick Share. 100% free, secure peer-to-peer file sharing using WebRTC. No file size limits, no registration, end-to-end encrypted. Transfer files directly between browsers.',
     siteName: 'Quick Share',
     images: [{
       url: '/og-image.png',
       width: 1200,
       height: 630,
-      alt: 'Quick Share - Secure P2P File Transfer',
+      alt: 'Quick Share - Secure P2P File Transfer - Send Large Files Free',
+      type: 'image/png',
     }],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Quick Share - Free P2P File Transfer',
-    description: 'Send large files instantly. Free, secure, peer-to-peer file sharing using WebRTC. No limits, no registration.',
+    title: 'Quick Share - Free P2P File Transfer | Send Large Files',
+    description: 'Send large files instantly. Free, secure, peer-to-peer file sharing using WebRTC. No limits, no registration, end-to-end encrypted.',
     images: ['/og-image.png'],
     creator: '@quickshare',
+    site: '@quickshare',
   },
   icons: {
     icon: [
@@ -83,6 +143,7 @@ export const metadata: Metadata = {
   robots: {
     index: true,
     follow: true,
+    nocache: false,
     googleBot: {
       index: true,
       follow: true,
@@ -95,6 +156,14 @@ export const metadata: Metadata = {
     canonical: 'https://quicksharep2p.onrender.com',
   },
   category: 'technology',
+  applicationName: 'Quick Share',
+  referrer: 'origin-when-cross-origin',
+  appLinks: {
+    web: {
+      url: 'https://quicksharep2p.onrender.com',
+      should_fallback: true,
+    },
+  },
 };
 
 export default function RootLayout({
