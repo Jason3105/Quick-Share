@@ -18,6 +18,7 @@ export function FileSender({ onBack }: FileSenderProps) {
   const [linkCopied, setLinkCopied] = useState(false);
   const [filesSentMap, setFilesSentMap] = useState<{[key: number]: boolean}>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const hasSharedFileList = useRef(false);
 
   const { 
     isConnected, 
@@ -38,11 +39,17 @@ export function FileSender({ onBack }: FileSenderProps) {
     }
   }, [files, roomCode, createRoom]);
 
-  // Send file list when connection is established AND data channel is open
+  // Reset the file list shared flag when files change
   useEffect(() => {
-    if (isConnected && files.length > 0 && dataChannel?.readyState === "open") {
+    hasSharedFileList.current = false;
+  }, [files]);
+
+  // Send file list when connection is established AND data channel is open - only once
+  useEffect(() => {
+    if (isConnected && files.length > 0 && dataChannel?.readyState === "open" && !hasSharedFileList.current) {
       console.log("🔗 Connection ready - sending file list");
       sendFileList(files);
+      hasSharedFileList.current = true;
     }
   }, [isConnected, files, sendFileList, dataChannel]);
 
