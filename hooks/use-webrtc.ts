@@ -4,7 +4,12 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { io, Socket } from "socket.io-client";
 import { nanoid } from "nanoid";
 
-const CHUNK_SIZE = 16384; // 16KB chunks
+// Adaptive chunk sizing for optimal performance
+const MIN_CHUNK_SIZE = 16384; // 16KB - minimum for slow connections
+const DEFAULT_CHUNK_SIZE = 65536; // 64KB - default for most connections
+const MAX_CHUNK_SIZE = 262144; // 256KB - maximum for fast connections
+const OPTIMAL_BUFFER_SIZE = 1024 * 1024; // 1MB - optimal buffer threshold
+const MAX_BUFFER_SIZE = 2 * 1024 * 1024; // 2MB - maximum buffer before backpressure
 
 interface ReceivedFile {
   name: string;
@@ -245,16 +250,11 @@ export function useWebRTC() {
           setTransferProgress(0);
         } else if (metadata.type === "file-end") {
           console.log("✅ File transfer complete");
-          // Reconstruct file
+          // Reconstruct file and trigger download immediately
           const blob = new Blob(receivedChunks.current);
           const fileName = fileMetadata.current?.name || "unknown";
           
-          setReceivedFiles(prev => [...prev, {
-            name: fileName,
-            blob,
-          }]);
-          
-          // Automatically trigger download
+          // Trigger download immediately
           console.log("📥 Auto-downloading file:", fileName);
           const url = URL.createObjectURL(blob);
           const a = document.createElement("a");
@@ -263,14 +263,21 @@ export function useWebRTC() {
           document.body.appendChild(a);
           a.click();
           document.body.removeChild(a);
-          URL.revokeObjectURL(url);
           
+          // Update state after download is triggered
+          setReceivedFiles(prev => [...prev, {
+            name: fileName,
+            blob,
+          }]);
           setTransferProgress(100);
+          
+          // Clean up URL and reset state after a short delay
           setTimeout(() => {
+            URL.revokeObjectURL(url);
             setCurrentFileName("");
             setDownloadingFileIndex(null);
             setTransferProgress(0);
-          }, 2000);
+          }, 1000);
         }
       } else {
         // File chunk
@@ -423,11 +430,12 @@ export function useWebRTC() {
               setTransferProgress(0);
             } else if (metadata.type === "file-end") {
               const fileName = fileMetadata.current?.name || "download";
-              const blob = new Blob(receivedChunks.current);
-              setReceivedFiles(prev => [...prev, { name: fileName, blob }]);
               
-              // Auto-download
-              console.log("📥 Auto-downloading file:", fileName);
+              // Construct blob and trigger download immediately
+              console.log("📥 Constructing and downloading file:", fileName);
+              const blob = new Blob(receivedChunks.current);
+              
+              // Trigger download immediately
               const url = URL.createObjectURL(blob);
               const a = document.createElement("a");
               a.href = url;
@@ -435,14 +443,18 @@ export function useWebRTC() {
               document.body.appendChild(a);
               a.click();
               document.body.removeChild(a);
-              URL.revokeObjectURL(url);
               
+              // Update state after download is triggered
+              setReceivedFiles(prev => [...prev, { name: fileName, blob }]);
               setTransferProgress(100);
+              
+              // Clean up URL and reset state after a short delay
               setTimeout(() => {
+                URL.revokeObjectURL(url);
                 setCurrentFileName("");
                 setDownloadingFileIndex(null);
                 setTransferProgress(0);
-              }, 2000);
+              }, 1000);
             }
           } else {
             receivedChunks.current.push(e.data);
@@ -543,7 +555,7 @@ export function useWebRTC() {
     console.log("Requested file download:", fileIndex);
   }, [dataChannel]);
 
-  // Send file
+  // Send file with adaptive chunking and optimized flow control
   const sendFile = useCallback((file: File): Promise<void> => {
     return new Promise((resolve, reject) => {
       if (!dataChannel || dataChannel.readyState !== "open") {
@@ -559,51 +571,106 @@ export function useWebRTC() {
         size: file.size,
       }));
 
-      // Send file in chunks with improved flow control
-      const reader = new FileReader();
+      // Adaptive chunk sizing based on network performance
+      let currentChunkSize = DEFAULT_CHUNK_SIZE;
       let offset = 0;
-      const MAX_BUFFER_SIZE = 256 * 1024; // 256KB buffer threshold for better flow control
+      let lastProgressUpdate = Date.now();
+      let bytesTransferred = 0;
+      const startTime = Date.now();
+      
+      // Performance monitoring for adaptive sizing
+      const updateChunkSize = () => {
+        const now = Date.now();
+        const elapsed = (now - lastProgressUpdate) / 1000; // seconds
+        
+        if (elapsed > 0 && bytesTransferred > 0) {
+          const throughput = bytesTransferred / elapsed; // bytes per second
+          
+          // Adapt chunk size based on throughput and buffer state
+          if (throughput > 1024 * 1024 && dataChannel.bufferedAmount < OPTIMAL_BUFFER_SIZE / 2) {
+            // Fast connection, low buffer - increase chunk size
+            currentChunkSize = Math.min(currentChunkSize * 1.5, MAX_CHUNK_SIZE);
+          } else if (dataChannel.bufferedAmount > OPTIMAL_BUFFER_SIZE) {
+            // Buffer getting full - reduce chunk size
+            currentChunkSize = Math.max(currentChunkSize * 0.75, MIN_CHUNK_SIZE);
+          }
+          
+          currentChunkSize = Math.floor(currentChunkSize);
+          bytesTransferred = 0;
+          lastProgressUpdate = now;
+        }
+      };
 
       const sendChunk = (chunk: ArrayBuffer) => {
-        dataChannel.send(chunk);
-        offset += chunk.byteLength;
+        try {
+          dataChannel.send(chunk);
+          offset += chunk.byteLength;
+          bytesTransferred += chunk.byteLength;
 
-        const progress = Math.round((offset / file.size) * 100);
-        setTransferProgress(progress);
+          const progress = Math.round((offset / file.size) * 100);
+          setTransferProgress(progress);
 
-        if (offset < file.size) {
-          readNextChunk();
-        } else {
-          // Send end signal
-          dataChannel.send(JSON.stringify({ type: "file-end" }));
-          setTransferProgress(100);
-          setTimeout(() => resolve(), 100);
+          // Periodically adapt chunk size based on performance
+          if (offset % (DEFAULT_CHUNK_SIZE * 10) === 0) {
+            updateChunkSize();
+          }
+
+          if (offset < file.size) {
+            readNextChunk();
+          } else {
+            // Send end signal
+            const elapsed = (Date.now() - startTime) / 1000;
+            const avgSpeed = (file.size / elapsed / 1024 / 1024).toFixed(2);
+            console.log(`✅ Transfer complete: ${avgSpeed} MB/s average`);
+            
+            dataChannel.send(JSON.stringify({ type: "file-end" }));
+            setTransferProgress(100);
+            setTimeout(() => resolve(), 100);
+          }
+        } catch (error) {
+          console.error("Error sending chunk:", error);
+          reject(error);
         }
       };
 
       const readNextChunk = () => {
-        // Wait if buffer is too full
-        if (dataChannel.bufferedAmount > MAX_BUFFER_SIZE) {
-          // Schedule retry after a small delay
+        // Adaptive flow control with optimized buffer management
+        const bufferAmount = dataChannel.bufferedAmount;
+        
+        if (bufferAmount > MAX_BUFFER_SIZE) {
+          // Buffer critically full - wait longer and reduce chunk size
+          currentChunkSize = Math.max(currentChunkSize * 0.5, MIN_CHUNK_SIZE);
+          setTimeout(readNextChunk, 50);
+          return;
+        } else if (bufferAmount > OPTIMAL_BUFFER_SIZE) {
+          // Buffer moderately full - brief wait
           setTimeout(readNextChunk, 10);
           return;
         }
         
-        const slice = file.slice(offset, offset + CHUNK_SIZE);
+        // Buffer healthy - proceed with optimal chunk size
+        const slice = file.slice(offset, offset + currentChunkSize);
+        
+        // Use FileReader for chunk reading
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          if (e.target?.result && dataChannel.readyState === "open") {
+            const chunk = e.target.result as ArrayBuffer;
+            sendChunk(chunk);
+          } else if (dataChannel.readyState !== "open") {
+            reject(new Error("Data channel closed during transfer"));
+          }
+        };
+        
+        reader.onerror = () => {
+          reject(new Error("File read error"));
+        };
+        
         reader.readAsArrayBuffer(slice);
       };
 
-      reader.onload = (e) => {
-        if (e.target?.result && dataChannel.readyState === "open") {
-          const chunk = e.target.result as ArrayBuffer;
-          sendChunk(chunk);
-        }
-      };
-
-      reader.onerror = () => {
-        reject(new Error("File read error"));
-      };
-
+      // Start transfer
+      console.log(`🚀 Starting transfer: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`);
       readNextChunk();
     });
   }, [dataChannel]);
