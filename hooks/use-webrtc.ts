@@ -6,10 +6,13 @@ import { nanoid } from "nanoid";
 
 // Adaptive chunk sizing for optimal performance
 const MIN_CHUNK_SIZE = 16384; // 16KB - minimum for slow connections
-const DEFAULT_CHUNK_SIZE = 65536; // 64KB - default for most connections
-const MAX_CHUNK_SIZE = 262144; // 256KB - maximum for fast connections
-const OPTIMAL_BUFFER_SIZE = 1024 * 1024; // 1MB - optimal buffer threshold
-const MAX_BUFFER_SIZE = 2 * 1024 * 1024; // 2MB - maximum buffer before backpressure
+const DEFAULT_CHUNK_SIZE = 131072; // 128KB - optimized for modern networks
+const MAX_CHUNK_SIZE = 524288; // 512KB - maximum for very fast connections
+const OPTIMAL_BUFFER_SIZE = 512 * 1024; // 512KB - optimal buffer threshold
+const MAX_BUFFER_SIZE = 1024 * 1024; // 1MB - maximum buffer before backpressure
+const BUFFER_LOW_THRESHOLD = 256 * 1024; // 256KB - threshold for aggressive sending
+const CHUNK_RAMP_UP_FACTOR = 1.25; // Gradual chunk size increase
+const CHUNK_RAMP_DOWN_FACTOR = 0.8; // Quick chunk size decrease on congestion
 
 interface ReceivedFile {
   name: string;
@@ -37,6 +40,18 @@ export function useWebRTC() {
   const onFileRequestCallback = useRef<((fileIndex: number) => void) | null>(null);
   const socketRef = useRef<Socket | null>(null);
   const currentRoomId = useRef<string>("");
+  const iceCandidateQueue = useRef<RTCIceCandidateInit[]>([]);
+  const isJoining = useRef<boolean>(false);
+  const connectionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const makingOffer = useRef<boolean>(false);
+  const ignoreOffer = useRef<boolean>(false);
+  const isPolite = useRef<boolean>(false);
+  const reconnectAttempts = useRef<number>(0);
+  const maxReconnectAttempts = 3;
+  const measuredBandwidth = useRef<number>(0);
+  const lastStatsTime = useRef<number>(Date.now());
+  const lastBytesSent = useRef<number>(0);
+  const statsIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Initialize Socket.io connection
   useEffect(() => {
@@ -85,12 +100,38 @@ export function useWebRTC() {
       }
       
       try {
+        makingOffer.current = true;
+        
+        // Wait for ICE gathering to complete for better connectivity
+        const waitForICEGathering = new Promise<void>((resolve) => {
+          if (pc.iceGatheringState === 'complete') {
+            resolve();
+          } else {
+            const checkGathering = () => {
+              if (pc.iceGatheringState === 'complete') {
+                pc.removeEventListener('icegatheringstatechange', checkGathering);
+                resolve();
+              }
+            };
+            pc.addEventListener('icegatheringstatechange', checkGathering);
+            // Timeout after 3 seconds to not block too long
+            setTimeout(() => {
+              pc.removeEventListener('icegatheringstatechange', checkGathering);
+              resolve();
+            }, 3000);
+          }
+        });
+        
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
-        socketRef.current?.emit("offer", { roomId: room, offer });
-        console.log("✅ Sent offer");
+        await waitForICEGathering;
+        
+        socketRef.current?.emit("offer", { roomId: room, offer: pc.localDescription });
+        console.log("✅ Sent offer (ICE gathering:", pc.iceGatheringState, ")");
       } catch (error) {
         console.error("❌ Error creating offer:", error);
+      } finally {
+        makingOffer.current = false;
       }
     });
 
@@ -104,11 +145,44 @@ export function useWebRTC() {
       }
       
       try {
-        await pc.setRemoteDescription(new RTCSessionDescription(offer));
+        // Perfect negotiation: handle collision
+        const offerCollision = (offer.type === 'offer') &&
+          (makingOffer.current || pc.signalingState !== 'stable');
+        
+        ignoreOffer.current = !isPolite.current && offerCollision;
+        if (ignoreOffer.current) {
+          console.log("⚠️ Ignoring offer due to collision (impolite peer)");
+          return;
+        }
+        
+        // Rollback if needed
+        if (offerCollision) {
+          console.log("🔄 Collision detected, rolling back");
+          await Promise.all([
+            pc.setLocalDescription({ type: 'rollback' }),
+            pc.setRemoteDescription(offer)
+          ]);
+        } else {
+          await pc.setRemoteDescription(new RTCSessionDescription(offer));
+        }
+        
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
         socketRef.current?.emit("answer", { roomId: room, answer });
         console.log("✅ Sent answer");
+        
+        // Process queued ICE candidates
+        if (iceCandidateQueue.current.length > 0) {
+          console.log(`📦 Processing ${iceCandidateQueue.current.length} queued ICE candidates`);
+          for (const candidate of iceCandidateQueue.current) {
+            try {
+              await pc.addIceCandidate(new RTCIceCandidate(candidate));
+            } catch (error) {
+              console.error("❌ Error adding queued ICE candidate:", error);
+            }
+          }
+          iceCandidateQueue.current = [];
+        }
       } catch (error) {
         console.error("❌ Error handling offer:", error);
       }
@@ -125,6 +199,19 @@ export function useWebRTC() {
       try {
         await pc.setRemoteDescription(new RTCSessionDescription(answer));
         console.log("✅ Set remote description from answer");
+        
+        // Process queued ICE candidates
+        if (iceCandidateQueue.current.length > 0) {
+          console.log(`📦 Processing ${iceCandidateQueue.current.length} queued ICE candidates`);
+          for (const candidate of iceCandidateQueue.current) {
+            try {
+              await pc.addIceCandidate(new RTCIceCandidate(candidate));
+            } catch (error) {
+              console.error("❌ Error adding queued ICE candidate:", error);
+            }
+          }
+          iceCandidateQueue.current = [];
+        }
       } catch (error) {
         console.error("❌ Error handling answer:", error);
       }
@@ -141,6 +228,7 @@ export function useWebRTC() {
         }
       } else {
         console.log("⏳ Queueing ICE candidate (waiting for remote description)");
+        iceCandidateQueue.current.push(candidate);
       }
     });
 
@@ -148,6 +236,21 @@ export function useWebRTC() {
 
     return () => {
       socketInstance.disconnect();
+      // Clean up peer connection on unmount
+      if (peerConnectionRef.current) {
+        peerConnectionRef.current.close();
+        peerConnectionRef.current = null;
+      }
+      // Clear any timeouts
+      if (connectionTimeoutRef.current) {
+        clearTimeout(connectionTimeoutRef.current);
+        connectionTimeoutRef.current = null;
+      }
+      // Clear stats monitoring
+      if (statsIntervalRef.current) {
+        clearInterval(statsIntervalRef.current);
+        statsIntervalRef.current = null;
+      }
     };
   }, []);
 
@@ -162,7 +265,27 @@ export function useWebRTC() {
       iceServers: [
         { urls: "stun:stun.l.google.com:19302" },
         { urls: "stun:stun1.l.google.com:19302" },
+        { urls: "stun:stun2.l.google.com:19302" },
+        { urls: "stun:stun3.l.google.com:19302" },
+        { urls: "stun:stun4.l.google.com:19302" },
+        // Public TURN servers for cross-network connectivity
+        {
+          urls: "turn:openrelay.metered.ca:80",
+          username: "openrelayproject",
+          credential: "openrelayproject",
+        },
+        {
+          urls: "turn:openrelay.metered.ca:443",
+          username: "openrelayproject",
+          credential: "openrelayproject",
+        },
+        {
+          urls: "turn:openrelay.metered.ca:443?transport=tcp",
+          username: "openrelayproject",
+          credential: "openrelayproject",
+        },
       ],
+      iceCandidatePoolSize: 10,
     });
 
     pc.onicecandidate = (event) => {
@@ -188,7 +311,10 @@ export function useWebRTC() {
     };
 
     if (isSender) {
-      const channel = pc.createDataChannel("fileTransfer");
+      const channel = pc.createDataChannel("fileTransfer", {
+        ordered: true, // Maintain order for file integrity
+        maxRetransmits: undefined, // Reliable delivery
+      });
       setupDataChannel(channel);
       setDataChannel(channel);
     } else {
@@ -302,12 +428,39 @@ export function useWebRTC() {
       console.log("📝 Creating room:", code);
       socket.emit("create-room", { roomId: code });
       
+      // Clear any queued ICE candidates
+      iceCandidateQueue.current = [];
+      
+      // Sender is impolite peer (will not rollback on collision)
+      isPolite.current = false;
+      reconnectAttempts.current = 0;
+      
       // Create peer connection as sender
       const pc = new RTCPeerConnection({
         iceServers: [
           { urls: "stun:stun.l.google.com:19302" },
           { urls: "stun:stun1.l.google.com:19302" },
+          { urls: "stun:stun2.l.google.com:19302" },
+          { urls: "stun:stun3.l.google.com:19302" },
+          { urls: "stun:stun4.l.google.com:19302" },
+          // Public TURN servers for cross-network connectivity
+          {
+            urls: "turn:openrelay.metered.ca:80",
+            username: "openrelayproject",
+            credential: "openrelayproject",
+          },
+          {
+            urls: "turn:openrelay.metered.ca:443",
+            username: "openrelayproject",
+            credential: "openrelayproject",
+          },
+          {
+            urls: "turn:openrelay.metered.ca:443?transport=tcp",
+            username: "openrelayproject",
+            credential: "openrelayproject",
+          },
         ],
+        iceCandidatePoolSize: 10,
       });
 
       pc.onicecandidate = (event) => {
@@ -324,19 +477,70 @@ export function useWebRTC() {
         console.log("🔗 Connection state:", pc.connectionState);
         setConnectionState(pc.connectionState);
         setIsConnected(pc.connectionState === "connected");
+        
+        if (pc.connectionState === "connected") {
+          reconnectAttempts.current = 0;
+        } else if (pc.connectionState === "disconnected") {
+          // Auto-reconnect on disconnect
+          console.log("⚠️ Connection disconnected, attempting reconnect...");
+          if (reconnectAttempts.current < maxReconnectAttempts) {
+            reconnectAttempts.current++;
+            setTimeout(() => {
+              if (pc.connectionState === "disconnected") {
+                console.log(`🔄 Reconnect attempt ${reconnectAttempts.current}/${maxReconnectAttempts}`);
+                pc.restartIce();
+              }
+            }, 2000 * reconnectAttempts.current);
+          }
+        } else if (pc.connectionState === "failed") {
+          console.error("❌ Connection failed");
+          setConnectionState("Connection failed - Try reloading or retry");
+        }
       };
 
-      const channel = pc.createDataChannel("fileTransfer");
+      const channel = pc.createDataChannel("fileTransfer", {
+        ordered: true, // Maintain order for file integrity
+        maxRetransmits: undefined, // Reliable delivery  
+      });
       channel.binaryType = "arraybuffer";
       
       channel.onopen = () => {
         console.log("✅ Data channel opened");
         setIsConnected(true);
+        
+        // Start monitoring connection stats for optimization
+        if (statsIntervalRef.current) {
+          clearInterval(statsIntervalRef.current);
+        }
+        statsIntervalRef.current = setInterval(async () => {
+          if (peerConnectionRef.current) {
+            try {
+              const stats = await peerConnectionRef.current.getStats();
+              stats.forEach((report) => {
+                if (report.type === 'outbound-rtp' || report.type === 'candidate-pair') {
+                  // Monitor for congestion and adapt
+                  if (report.currentRoundTripTime && report.currentRoundTripTime > 0.3) {
+                    // High RTT detected - network congestion
+                    console.warn('⚠️ High RTT detected:', report.currentRoundTripTime);
+                  }
+                }
+              });
+            } catch (err) {
+              // Stats API might not be available in all browsers
+            }
+          }
+        }, 5000); // Check every 5 seconds
       };
 
       channel.onclose = () => {
         console.log("❌ Data channel closed");
         setIsConnected(false);
+        
+        // Clear stats monitoring
+        if (statsIntervalRef.current) {
+          clearInterval(statsIntervalRef.current);
+          statsIntervalRef.current = null;
+        }
       };
 
       channel.onmessage = (event) => {
@@ -359,7 +563,20 @@ export function useWebRTC() {
 
   // Join room (receiver)
   const joinRoom = useCallback((code: string) => {
+    // Prevent duplicate join attempts
+    if (isJoining.current) {
+      console.log("⚠️ Already attempting to join, ignoring duplicate request");
+      return;
+    }
+    
     console.log("Joining room:", code);
+    isJoining.current = true;
+    
+    // Clear any existing timeout
+    if (connectionTimeoutRef.current) {
+      clearTimeout(connectionTimeoutRef.current);
+      connectionTimeoutRef.current = null;
+    }
     
     // Close any existing peer connection before creating a new one
     if (peerConnectionRef.current) {
@@ -367,6 +584,13 @@ export function useWebRTC() {
       peerConnectionRef.current.close();
       peerConnectionRef.current = null;
     }
+    
+    // Clear ICE candidate queue
+    iceCandidateQueue.current = [];
+    
+    // Receiver is polite peer (will rollback on collision)
+    isPolite.current = true;
+    reconnectAttempts.current = 0;
 
     setRoomId(code);
     currentRoomId.current = code;
@@ -380,7 +604,27 @@ export function useWebRTC() {
         iceServers: [
           { urls: "stun:stun.l.google.com:19302" },
           { urls: "stun:stun1.l.google.com:19302" },
+          { urls: "stun:stun2.l.google.com:19302" },
+          { urls: "stun:stun3.l.google.com:19302" },
+          { urls: "stun:stun4.l.google.com:19302" },
+          // Public TURN servers for cross-network connectivity
+          {
+            urls: "turn:openrelay.metered.ca:80",
+            username: "openrelayproject",
+            credential: "openrelayproject",
+          },
+          {
+            urls: "turn:openrelay.metered.ca:443",
+            username: "openrelayproject",
+            credential: "openrelayproject",
+          },
+          {
+            urls: "turn:openrelay.metered.ca:443?transport=tcp",
+            username: "openrelayproject",
+            credential: "openrelayproject",
+          },
         ],
+        iceCandidatePoolSize: 10,
       });
 
       pc.onicecandidate = (event) => {
@@ -390,13 +634,59 @@ export function useWebRTC() {
             roomId: code,
             candidate: event.candidate,
           });
+        } else {
+          console.log("✅ ICE gathering complete");
+        }
+      };
+      pc.onicecandidateerror = (event: any) => {
+        console.warn("⚠️ ICE candidate error:", event.errorText || event);
+      };
+
+      pc.oniceconnectionstatechange = () => {
+        console.log("❄️ ICE connection state:", pc.iceConnectionState);
+      };
+      pc.onicecandidateerror = (event) => {
+        console.warn("⚠️ ICE candidate error:", event);
+      };
+
+      pc.oniceconnectionstatechange = () => {
+        console.log("❄️ ICE connection state:", pc.iceConnectionState);
+        if (pc.iceConnectionState === "failed" && reconnectAttempts.current < maxReconnectAttempts) {
+          reconnectAttempts.current++;
+          console.log(`🔄 ICE failed, restarting (attempt ${reconnectAttempts.current}/${maxReconnectAttempts})`);
+          pc.restartIce();
         }
       };
 
       pc.onconnectionstatechange = () => {
         console.log("🔗 Connection state:", pc.connectionState);
         setConnectionState(pc.connectionState);
-        setIsConnected(pc.connectionState === "connected");
+        const connected = pc.connectionState === "connected";
+        setIsConnected(connected);
+        
+        if (connected) {
+          // Clear timeout on successful connection
+          if (connectionTimeoutRef.current) {
+            clearTimeout(connectionTimeoutRef.current);
+            connectionTimeoutRef.current = null;
+          }
+          isJoining.current = false;
+          reconnectAttempts.current = 0;
+        } else if (pc.connectionState === "disconnected") {
+          // Auto-reconnect on disconnect
+          if (reconnectAttempts.current < maxReconnectAttempts) {
+            reconnectAttempts.current++;
+            setTimeout(() => {
+              if (pc.connectionState === "disconnected") {
+                console.log(`🔄 Reconnect attempt ${reconnectAttempts.current}/${maxReconnectAttempts}`);
+                pc.restartIce();
+              }
+            }, 2000 * reconnectAttempts.current);
+          }
+        } else if (pc.connectionState === "failed" || pc.connectionState === "closed") {
+          // Allow retry on failure
+          isJoining.current = false;
+        }
       };
 
       pc.ondatachannel = (event) => {
@@ -479,24 +769,19 @@ export function useWebRTC() {
         socket.emit("request-offer", { roomId: code });
       }, 500);
       
-      // Set a timeout for connection establishment
-      const connectionTimeout = setTimeout(() => {
+      // Set a timeout for connection establishment - clear on success or allow retry
+      connectionTimeoutRef.current = setTimeout(() => {
         if (pc.connectionState !== "connected") {
-          console.error("⏱️ Connection timeout - failed to establish connection within 20 seconds");
-          setConnectionState("Connection timeout - Please try again");
-          // Don't close the peer connection, allow retry
+          console.error("⏱️ Connection timeout - failed to establish connection within 30 seconds");
+          setConnectionState("Connection timeout - Click retry to try again");
+          isJoining.current = false;
         }
-      }, 20000); // 20 seconds
+      }, 30000); // 30 seconds
       
-      // Clear timeout if connection succeeds
-      pc.addEventListener("connectionstatechange", () => {
-        if (pc.connectionState === "connected") {
-          clearTimeout(connectionTimeout);
-        }
-      }, { once: true });
     } else {
       console.error("❌ Socket not connected, cannot join room");
       setConnectionState("Not connected to server");
+      isJoining.current = false;
     }
   }, [socket]);
 
@@ -571,29 +856,55 @@ export function useWebRTC() {
         size: file.size,
       }));
 
-      // Adaptive chunk sizing based on network performance
+      // Advanced adaptive transfer state
       let currentChunkSize = DEFAULT_CHUNK_SIZE;
       let offset = 0;
       let lastProgressUpdate = Date.now();
       let bytesTransferred = 0;
+      let totalBytesTransferred = 0;
       const startTime = Date.now();
+      let highWaterMark = 0;
+      let consecutiveSlowSends = 0;
+      let prefetchedChunk: ArrayBuffer | null = null;
+      let isPrefetching = false;
       
-      // Performance monitoring for adaptive sizing
+      // Intelligent performance monitoring and adaptation
       const updateChunkSize = () => {
         const now = Date.now();
         const elapsed = (now - lastProgressUpdate) / 1000; // seconds
+        const bufferAmount = dataChannel.bufferedAmount;
         
-        if (elapsed > 0 && bytesTransferred > 0) {
-          const throughput = bytesTransferred / elapsed; // bytes per second
+        if (elapsed > 0.1 && bytesTransferred > 0) {
+          const instantThroughput = bytesTransferred / elapsed; // bytes per second
+          const bufferRatio = bufferAmount / MAX_BUFFER_SIZE;
           
-          // Adapt chunk size based on throughput and buffer state
-          if (throughput > 1024 * 1024 && dataChannel.bufferedAmount < OPTIMAL_BUFFER_SIZE / 2) {
-            // Fast connection, low buffer - increase chunk size
-            currentChunkSize = Math.min(currentChunkSize * 1.5, MAX_CHUNK_SIZE);
-          } else if (dataChannel.bufferedAmount > OPTIMAL_BUFFER_SIZE) {
-            // Buffer getting full - reduce chunk size
-            currentChunkSize = Math.max(currentChunkSize * 0.75, MIN_CHUNK_SIZE);
+          // Update bandwidth measurement
+          measuredBandwidth.current = instantThroughput;
+          
+          // Multi-factor adaptive sizing
+          if (bufferAmount < BUFFER_LOW_THRESHOLD && consecutiveSlowSends === 0) {
+            // Buffer very low, network can handle more - ramp up aggressively
+            if (instantThroughput > 2 * 1024 * 1024) { // > 2 MB/s
+              currentChunkSize = Math.min(currentChunkSize * CHUNK_RAMP_UP_FACTOR, MAX_CHUNK_SIZE);
+              consecutiveSlowSends = 0;
+            } else {
+              currentChunkSize = Math.min(currentChunkSize * 1.1, MAX_CHUNK_SIZE);
+            }
+          } else if (bufferAmount > OPTIMAL_BUFFER_SIZE) {
+            // Buffer filling up - back off quickly
+            currentChunkSize = Math.max(currentChunkSize * CHUNK_RAMP_DOWN_FACTOR, MIN_CHUNK_SIZE);
+            consecutiveSlowSends++;
+          } else if (bufferRatio > 0.6) {
+            // Buffer moderate - slight reduction
+            currentChunkSize = Math.max(currentChunkSize * 0.95, MIN_CHUNK_SIZE);
+          } else {
+            // Buffer healthy - gentle increase
+            currentChunkSize = Math.min(currentChunkSize * 1.05, MAX_CHUNK_SIZE);
+            consecutiveSlowSends = Math.max(0, consecutiveSlowSends - 1);
           }
+          
+          // Track high water mark for congestion detection
+          highWaterMark = Math.max(highWaterMark, bufferAmount);
           
           currentChunkSize = Math.floor(currentChunkSize);
           bytesTransferred = 0;
@@ -606,22 +917,31 @@ export function useWebRTC() {
           dataChannel.send(chunk);
           offset += chunk.byteLength;
           bytesTransferred += chunk.byteLength;
+          totalBytesTransferred += chunk.byteLength;
 
           const progress = Math.round((offset / file.size) * 100);
           setTransferProgress(progress);
 
-          // Periodically adapt chunk size based on performance
-          if (offset % (DEFAULT_CHUNK_SIZE * 10) === 0) {
+          // Adaptive chunk size updates - more frequent for better responsiveness
+          if (totalBytesTransferred % (currentChunkSize * 5) === 0 || 
+              dataChannel.bufferedAmount > OPTIMAL_BUFFER_SIZE) {
             updateChunkSize();
           }
 
           if (offset < file.size) {
-            readNextChunk();
+            // Continue immediately if buffer is low, otherwise schedule
+            if (dataChannel.bufferedAmount < BUFFER_LOW_THRESHOLD) {
+              readNextChunk();
+            } else {
+              // Use microtask for better responsiveness
+              queueMicrotask(readNextChunk);
+            }
           } else {
-            // Send end signal
+            // Transfer complete - send end signal
             const elapsed = (Date.now() - startTime) / 1000;
             const avgSpeed = (file.size / elapsed / 1024 / 1024).toFixed(2);
-            console.log(`✅ Transfer complete: ${avgSpeed} MB/s average`);
+            const peakChunkSize = Math.floor(highWaterMark / 1024);
+            console.log(`✅ Transfer complete: ${avgSpeed} MB/s average, peak buffer: ${peakChunkSize}KB`);
             
             dataChannel.send(JSON.stringify({ type: "file-end" }));
             setTransferProgress(100);
@@ -634,25 +954,54 @@ export function useWebRTC() {
       };
 
       const readNextChunk = () => {
-        // Adaptive flow control with optimized buffer management
+        // Advanced flow control with intelligent buffering
         const bufferAmount = dataChannel.bufferedAmount;
+        const bufferRatio = bufferAmount / MAX_BUFFER_SIZE;
         
-        if (bufferAmount > MAX_BUFFER_SIZE) {
-          // Buffer critically full - wait longer and reduce chunk size
+        // Dynamic wait times based on buffer state
+        if (bufferAmount > MAX_BUFFER_SIZE * 0.9) {
+          // Buffer critically full - aggressive backoff
           currentChunkSize = Math.max(currentChunkSize * 0.5, MIN_CHUNK_SIZE);
-          setTimeout(readNextChunk, 50);
+          consecutiveSlowSends++;
+          setTimeout(readNextChunk, Math.min(100, 20 * consecutiveSlowSends));
           return;
         } else if (bufferAmount > OPTIMAL_BUFFER_SIZE) {
-          // Buffer moderately full - brief wait
-          setTimeout(readNextChunk, 10);
+          // Buffer moderately full - adaptive wait
+          const waitTime = Math.ceil(bufferRatio * 20);
+          setTimeout(readNextChunk, waitTime);
+          return;
+        } else if (bufferAmount > BUFFER_LOW_THRESHOLD) {
+          // Buffer filling - brief wait
+          setTimeout(readNextChunk, 5);
           return;
         }
         
-        // Buffer healthy - proceed with optimal chunk size
-        const slice = file.slice(offset, offset + currentChunkSize);
+        // Buffer healthy or low - send immediately or use prefetched chunk
+        if (prefetchedChunk && offset < file.size) {
+          // Use prefetched chunk for zero-latency sending
+          sendChunk(prefetchedChunk);
+          prefetchedChunk = null;
+          
+          // Start prefetching next chunk if buffer is very low
+          if (bufferAmount < BUFFER_LOW_THRESHOLD && !isPrefetching && offset < file.size) {
+            isPrefetching = true;
+            const nextSlice = file.slice(offset, offset + currentChunkSize);
+            const prefetchReader = new FileReader();
+            prefetchReader.onload = (e) => {
+              if (e.target?.result) {
+                prefetchedChunk = e.target.result as ArrayBuffer;
+              }
+              isPrefetching = false;
+            };
+            prefetchReader.readAsArrayBuffer(nextSlice);
+          }
+          return;
+        }
         
-        // Use FileReader for chunk reading
+        // Read chunk normally
+        const slice = file.slice(offset, offset + currentChunkSize);
         const reader = new FileReader();
+        
         reader.onload = (e) => {
           if (e.target?.result && dataChannel.readyState === "open") {
             const chunk = e.target.result as ArrayBuffer;
@@ -680,6 +1029,35 @@ export function useWebRTC() {
     onFileRequestCallback.current = handler;
   }, []);
 
+  // Reset connection state for clean retry
+  const resetConnection = useCallback(() => {
+    console.log("🔄 Resetting connection state");
+    
+    // Clear timeout
+    if (connectionTimeoutRef.current) {
+      clearTimeout(connectionTimeoutRef.current);
+      connectionTimeoutRef.current = null;
+    }
+    
+    // Close peer connection
+    if (peerConnectionRef.current) {
+      peerConnectionRef.current.close();
+      peerConnectionRef.current = null;
+    }
+    
+    // Clear ICE candidate queue
+    iceCandidateQueue.current = [];
+    
+    // Reset joining flag
+    isJoining.current = false;
+    
+    // Reset state
+    setPeerConnection(null);
+    setDataChannel(null);
+    setIsConnected(false);
+    setConnectionState("Not connected");
+  }, []);
+
   return {
     createRoom,
     joinRoom,
@@ -687,6 +1065,7 @@ export function useWebRTC() {
     sendFileList,
     requestFileDownload,
     setFileRequestHandler,
+    resetConnection,
     isConnected,
     connectionState,
     transferProgress,

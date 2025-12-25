@@ -31,7 +31,8 @@ export function FileReceiver({ onBack, initialRoomCode = "" }: FileReceiverProps
     availableFiles,
     requestFileDownload,
     downloadingFileIndex,
-    socket
+    socket,
+    resetConnection
   } = useWebRTC();
 
   // Auto-join if initial room code is provided - wait for socket to connect
@@ -124,15 +125,22 @@ export function FileReceiver({ onBack, initialRoomCode = "" }: FileReceiverProps
   // Reset state to allow retry if connection fails
   const handleRetry = () => {
     console.log("Retrying connection...");
+    
+    // Reset all connection state
+    resetConnection();
+    
+    // Reset local state
     setHasJoinedRoom(false);
     hasAttemptedJoin.current = false;
     isProcessingQRScan.current = false;
+    
     // Keep the code so user doesn't have to re-enter
     if (code.trim()) {
       // Small delay to ensure state is clean
       setTimeout(() => {
-        handleJoin();
-      }, 200);
+        setHasJoinedRoom(true);
+        joinRoom(code.trim());
+      }, 300);
     }
   };
 
@@ -209,7 +217,7 @@ export function FileReceiver({ onBack, initialRoomCode = "" }: FileReceiverProps
                   <>
                     <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 mt-1">
                       <Loader2 className="h-3 w-3 animate-spin" />
-                      <span className="text-xs font-medium">Establishing secure connection...</span>
+                      <span className="text-xs font-medium">Establishing secure P2P connection...</span>
                     </div>
                     {(connectionState.includes("timeout") || connectionState.includes("failed") || connectionState.includes("disconnected")) && (
                       <Button 
