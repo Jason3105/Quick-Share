@@ -115,7 +115,7 @@ export const metadata: Metadata = {
     description: 'Send large files instantly with Quick Share. 100% free, secure peer-to-peer file sharing using WebRTC. No file size limits, no registration, end-to-end encrypted. Transfer files directly between browsers.',
     siteName: 'Quick Share',
     images: [{
-      url: '/og-image.png',
+      url: 'https://quicksharep2p.onrender.com/og-image.png',
       width: 1200,
       height: 630,
       alt: 'Quick Share - Secure P2P File Transfer - Send Large Files Free',
@@ -126,18 +126,18 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     title: 'Quick Share - Free P2P File Transfer | Send Large Files',
     description: 'Send large files instantly. Free, secure, peer-to-peer file sharing using WebRTC. No limits, no registration, end-to-end encrypted.',
-    images: ['/og-image.png'],
+    images: ['https://quicksharep2p.onrender.com/og-image.png'],
     creator: '@quickshare',
     site: '@quickshare',
   },
   icons: {
     icon: [
-      { url: '/favicon-32x32.png', sizes: '32x32', type: 'image/png' },
-      { url: '/favicon-96x96.png', sizes: '96x96', type: 'image/png' },
-      { url: '/android-icon-192x192.png', sizes: '192x192', type: 'image/png' },
+      { url: 'https://quicksharep2p.onrender.com/favicon-32x32.png', sizes: '32x32', type: 'image/png' },
+      { url: 'https://quicksharep2p.onrender.com/favicon-96x96.png', sizes: '96x96', type: 'image/png' },
+      { url: 'https://quicksharep2p.onrender.com/android-icon-192x192.png', sizes: '192x192', type: 'image/png' },
     ],
     apple: [
-      { url: '/apple-icon-180x180.png', sizes: '180x180', type: 'image/png' },
+      { url: 'https://quicksharep2p.onrender.com/apple-icon-180x180.png', sizes: '180x180', type: 'image/png' },
     ],
   },
   robots: {
