@@ -61,6 +61,7 @@ export function useWebRTC() {
   const totalBytesReceived = useRef<number>(0);
   const streamController = useRef<ReadableStreamDefaultController<Uint8Array> | null>(null);
   const downloadStarted = useRef<boolean>(false);
+  const wakeLock = useRef<any>(null);
 
   // Initialize streaming download for large files
   const initializeStreamingDownload = async (fileName: string, fileSize: number) => {
@@ -243,6 +244,37 @@ export function useWebRTC() {
     receivedChunks.current = [];
     totalBytesReceived.current = 0;
     downloadStarted.current = false;
+  };
+
+  // Request wake lock to prevent screen sleep during transfer
+  const requestWakeLock = async () => {
+    try {
+      if ('wakeLock' in navigator) {
+        wakeLock.current = await (navigator as any).wakeLock.request('screen');
+        console.log('🔆 Wake lock active - screen will stay on during transfer');
+        
+        wakeLock.current.addEventListener('release', () => {
+          console.log('🌙 Wake lock released');
+        });
+      } else {
+        console.log('⚠️ Wake Lock API not supported on this device');
+      }
+    } catch (err) {
+      console.error('❌ Failed to request wake lock:', err);
+    }
+  };
+
+  // Release wake lock when transfer completes
+  const releaseWakeLock = async () => {
+    try {
+      if (wakeLock.current) {
+        await wakeLock.current.release();
+        wakeLock.current = null;
+        console.log('🌙 Wake lock released - screen can sleep now');
+      }
+    } catch (err) {
+      console.error('❌ Failed to release wake lock:', err);
+    }
   };
 
   // Wait for data channel to be ready
@@ -472,6 +504,8 @@ export function useWebRTC() {
       }
       // Cleanup streaming downloads
       cleanupStreamingDownload();
+      // Release wake lock
+      releaseWakeLock();
     };
   }, []);
 
@@ -596,12 +630,16 @@ export function useWebRTC() {
           receivedChunks.current = [];
           setTransferProgress(0);
           
+          // Request wake lock to prevent screen sleep
+          requestWakeLock();
+          
           // Initialize streaming download
           initializeStreamingDownload(metadata.name, metadata.size).catch(err => {
             if (err?.name === 'AbortError') {
               console.log("❌ User cancelled file download");
               setCurrentFileName("");
               setTransferProgress(0);
+              releaseWakeLock();
             }
           });
         } else if (metadata.type === "file-end") {
@@ -637,10 +675,12 @@ export function useWebRTC() {
               setDownloadingFileIndex(null);
               setTransferProgress(0);
               cleanupStreamingDownload();
+              releaseWakeLock();
             }, 1000);
           }).catch(err => {
             console.error("❌ Error finalizing download:", err);
             cleanupStreamingDownload();
+            releaseWakeLock();
           });
         }
       } else {
@@ -965,12 +1005,16 @@ export function useWebRTC() {
               setCurrentFileName(metadata.name);
               setTransferProgress(0);
               
+              // Request wake lock to prevent screen sleep
+              requestWakeLock();
+              
               // Initialize streaming download
               initializeStreamingDownload(metadata.name, metadata.size).catch(err => {
                 if (err?.name === 'AbortError') {
                   console.log("❌ User cancelled file download");
                   setCurrentFileName("");
                   setTransferProgress(0);
+                  releaseWakeLock();
                 }
               });
             } else if (metadata.type === "file-end") {
@@ -1002,10 +1046,12 @@ export function useWebRTC() {
                   setDownloadingFileIndex(null);
                   setTransferProgress(0);
                   cleanupStreamingDownload();
+                  releaseWakeLock();
                 }, 1000);
               }).catch(err => {
                 console.error("❌ Error finalizing download:", err);
                 cleanupStreamingDownload();
+                releaseWakeLock();
               });
             }
           } else {
@@ -1101,6 +1147,9 @@ export function useWebRTC() {
   const sendFile = useCallback(async (file: File): Promise<void> => {
     // Wait for data channel to be ready
     const channel = await waitForDataChannel(dataChannel, 10000);
+    
+    // Request wake lock to prevent screen sleep during send
+    await requestWakeLock();
     
     return new Promise((resolve, reject) => {
       // Send metadata
@@ -1199,10 +1248,15 @@ export function useWebRTC() {
             
             channel.send(JSON.stringify({ type: "file-end" }));
             setTransferProgress(100);
+            
+            // Release wake lock after send completes
+            releaseWakeLock();
+            
             setTimeout(() => resolve(), 100);
           }
         } catch (error) {
           console.error("Error sending chunk:", error);
+          releaseWakeLock(); // Release on error too
           reject(error);
         }
       };
