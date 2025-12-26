@@ -26,6 +26,8 @@ export function FileReceiver({ onBack, initialRoomCode = "" }: FileReceiverProps
     isConnected, 
     receivedFiles, 
     currentFileName,
+    currentFileIndex,
+    totalFiles,
     transferProgress,
     connectionState,
     availableFiles,
@@ -305,11 +307,16 @@ export function FileReceiver({ onBack, initialRoomCode = "" }: FileReceiverProps
                   </div>
                 </div>
                 <p className="font-bold text-xl sm:text-2xl text-blue-900 dark:text-blue-100 mb-2">
-                  Receiving File...
+                  Receiving File{totalFiles > 1 ? 's' : ''}...
                 </p>
-                <p className="text-sm sm:text-base text-blue-700 dark:text-blue-300 mb-4">
+                <p className="text-sm sm:text-base text-blue-700 dark:text-blue-300 mb-1">
                   {currentFileName || 'Downloading...'}
                 </p>
+                {totalFiles > 1 && (
+                  <p className="text-xs text-blue-600 dark:text-blue-400 mb-3">
+                    File {currentFileIndex} of {totalFiles}
+                  </p>
+                )}
                 <div className="bg-white/50 dark:bg-black/20 rounded-lg p-3 inline-flex items-center gap-2">
                   <div className="h-2 w-2 bg-blue-500 rounded-full animate-pulse"></div>
                   <p className="text-xs sm:text-sm font-medium">Transfer in progress</p>

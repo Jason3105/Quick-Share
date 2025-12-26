@@ -31,6 +31,8 @@ export function useWebRTC() {
   const [peersConnected, setPeersConnected] = useState(0);
   const [roomId, setRoomId] = useState<string>("");
   const [currentFileName, setCurrentFileName] = useState<string>("");
+  const [currentFileIndex, setCurrentFileIndex] = useState<number>(0);
+  const [totalFiles, setTotalFiles] = useState<number>(0);
   const [hasJoined, setHasJoined] = useState(false);
   const [availableFiles, setAvailableFiles] = useState<Array<{name: string; size: number; index: number}>>([]);
   const [downloadingFileIndex, setDownloadingFileIndex] = useState<number | null>(null);
@@ -1119,7 +1121,7 @@ export function useWebRTC() {
   }, [dataChannel]);
 
   // Send file with adaptive chunking and optimized flow control
-  const sendFile = useCallback(async (file: File): Promise<void> => {
+  const sendFile = useCallback(async (file: File, fileIndex: number = 0, totalFiles: number = 1): Promise<void> => {
     // Check if data channel exists first
     if (!dataChannel) {
       throw new Error("No data channel - connection not established");
@@ -1132,11 +1134,13 @@ export function useWebRTC() {
     await requestWakeLock();
     
     return new Promise((resolve, reject) => {
-      // Send metadata
+      // Send metadata with file index info
       channel.send(JSON.stringify({
         type: "file-metadata",
         name: file.name,
         size: file.size,
+        fileIndex: fileIndex,
+        totalFiles: totalFiles,
       }));
 
       // Advanced adaptive transfer state
@@ -1310,6 +1314,8 @@ export function useWebRTC() {
       console.log(`🚀 Starting transfer: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`);
       setTransferProgress(0); // Reset progress for this file
       setCurrentFileName(file.name); // Update current file name
+      setCurrentFileIndex(fileIndex);
+      setTotalFiles(totalFiles);
       readNextChunk();
     });
   }, [dataChannel]);
@@ -1362,6 +1368,8 @@ export function useWebRTC() {
     transferProgress,
     receivedFiles,
     currentFileName,
+    currentFileIndex,
+    totalFiles,
     peersConnected,
     availableFiles,
     downloadingFileIndex,

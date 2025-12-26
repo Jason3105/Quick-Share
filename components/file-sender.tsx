@@ -27,6 +27,9 @@ export function FileSender({ onBack }: FileSenderProps) {
     sendFileList,
     setFileRequestHandler,
     transferProgress,
+    currentFileName,
+    currentFileIndex,
+    totalFiles,
     createRoom,
     peersConnected,
     dataChannel,
@@ -82,11 +85,11 @@ export function FileSender({ onBack }: FileSenderProps) {
     try {
       console.log("📤 Starting file transfer - sending", files.length, "file(s)");
       
-      // Send files sequentially
+      // Send files sequentially with index tracking
       for (let i = 0; i < files.length; i++) {
         console.log(`📤 Sending file ${i + 1}/${files.length}:`, files[i].name);
-        // File metadata and progress will be set in sendFile
-        await sendFile(files[i]);
+        // Pass file index and total files to sendFile
+        await sendFile(files[i], i + 1, files.length);
         setFilesSentMap(prev => ({ ...prev, [i]: true }));
         
         // Small delay between files to ensure clean state and reset
@@ -358,10 +361,20 @@ export function FileSender({ onBack }: FileSenderProps) {
                 <div className="flex justify-between items-center">
                   <div className="flex items-center gap-2">
                     <Loader2 className="h-5 w-5 animate-spin text-blue-600 dark:text-blue-400" />
-                    <span className="font-semibold text-sm sm:text-base">Transferring file...</span>
+                    <div>
+                      <span className="font-semibold text-sm sm:text-base">Transferring file...</span>
+                      {totalFiles > 1 && (
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          File {currentFileIndex} of {totalFiles}
+                        </p>
+                      )}
+                    </div>
                   </div>
                   <span className="text-2xl font-bold text-blue-600 dark:text-blue-400">{transferProgress}%</span>
                 </div>
+                {currentFileName && (
+                  <p className="text-xs text-muted-foreground truncate">{currentFileName}</p>
+                )}
                 <div className="relative h-3 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden shadow-inner">
                   <div 
                     className="h-full bg-green-500 dark:bg-green-600 transition-all duration-300 ease-out"
