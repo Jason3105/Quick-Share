@@ -758,6 +758,8 @@ export function useWebRTC() {
       channel.onopen = () => {
         console.log("✅ Data channel opened");
         setIsConnected(true);
+        setDataChannelReady(true);
+        setConnectionState("Connected - Ready to transfer");
         
         // Start monitoring connection stats for optimization
         if (statsIntervalRef.current) {
@@ -786,6 +788,7 @@ export function useWebRTC() {
       channel.onclose = () => {
         console.log("❌ Data channel closed");
         setIsConnected(false);
+        setDataChannelReady(false);
         
         // Clear stats monitoring
         if (statsIntervalRef.current) {
@@ -948,12 +951,14 @@ export function useWebRTC() {
         channel.onopen = () => {
           console.log("✅ Data channel opened");
           setIsConnected(true);
+          setDataChannelReady(true);
           setConnectionState("Connected - Ready to receive");
         };
 
         channel.onclose = () => {
           console.log("❌ Data channel closed");
           setIsConnected(false);
+          setDataChannelReady(false);
         };
 
         channel.onmessage = (e) => {
