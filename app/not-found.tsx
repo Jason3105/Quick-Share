@@ -23,6 +23,7 @@ export default function NotFound() {
 
   useEffect(() => {
     setMessage(messages[Math.floor(Math.random() * messages.length)]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const createConfetti = () => {
@@ -89,7 +90,7 @@ export default function NotFound() {
               {message}
             </h1>
             <p className="text-base sm:text-lg text-muted-foreground max-w-md mx-auto">
-              The page you're looking for doesn't exist. Maybe it was transferred to another dimension? 🌌
+              The page you&apos;re looking for doesn&apos;t exist. Maybe it was transferred to another dimension? 🌌
             </p>
           </div>
 
@@ -103,9 +104,9 @@ export default function NotFound() {
                   <Gift className="w-6 h-6 sm:w-8 sm:h-8 text-pink-500 animate-bounce" />
                 </div>
                 <p className="text-base sm:text-lg">
-                  You've unlocked the secret achievement!<br />
+                  You&apos;ve unlocked the secret achievement!<br />
                   <span className="text-xs sm:text-sm text-muted-foreground mt-2 block">
-                    Easter Egg: "Seven Clicks Master" 🏆<br />
+                    Easter Egg: &quot;Seven Clicks Master&quot; 🏆<br />
                     Fun fact: This 404 page has better secrets than most treasure hunts! 
                   </span>
                 </p>
