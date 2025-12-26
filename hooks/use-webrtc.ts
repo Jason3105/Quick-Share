@@ -52,6 +52,107 @@ export function useWebRTC() {
   const lastStatsTime = useRef<number>(Date.now());
   const lastBytesSent = useRef<number>(0);
   const statsIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Streaming download support for large files
+  const fileWritableStream = useRef<WritableStreamDefaultWriter | null>(null);
+  const fileHandle = useRef<FileSystemFileHandle | null>(null);
+  const downloadAnchor = useRef<HTMLAnchorElement | null>(null);
+  const downloadChunks = useRef<Blob[]>([]);
+  const totalBytesReceived = useRef<number>(0);
+
+  // Initialize streaming download for large files
+  const initializeStreamingDownload = async (fileName: string, fileSize: number) => {
+    totalBytesReceived.current = 0; // Reset counter
+    try {
+      // Try modern File System Access API for streaming (Chrome, Edge, etc.)
+      if ('showSaveFilePicker' in window) {
+        const handle = await (window as any).showSaveFilePicker({
+          suggestedName: fileName,
+          types: [{
+            description: 'File',
+            accept: {'*/*': []}
+          }]
+        });
+        fileHandle.current = handle;
+        const writable = await handle.createWritable();
+        fileWritableStream.current = writable.getWriter();
+        console.log("✅ Using streaming download (File System Access API)");
+        return true;
+      }
+    } catch (err: any) {
+      if (err.name !== 'AbortError') {
+        console.warn("⚠️ File System Access API not available or user cancelled:", err);
+      } else {
+        throw err; // User cancelled, propagate to stop download
+      }
+    }
+    
+    // Fallback: Use Blob accumulation for smaller chunks (still better than old approach)
+    console.log("⚠️ Using fallback download method");
+    downloadChunks.current = [];
+    return false;
+  };
+
+  // Write chunk to stream or accumulate for fallback
+  const writeChunkToDownload = async (chunk: ArrayBuffer) => {
+    totalBytesReceived.current += chunk.byteLength; // Track total bytes
+    
+    if (fileWritableStream.current) {
+      // Stream directly to disk
+      try {
+        await fileWritableStream.current.write(chunk);
+      } catch (err) {
+        console.error("❌ Error writing chunk to stream:", err);
+        throw err;
+      }
+    } else {
+      // Fallback: accumulate in smaller Blob chunks
+      downloadChunks.current.push(new Blob([chunk]));
+      
+      // Periodically create intermediate blobs to reduce memory pressure
+      if (downloadChunks.current.length >= 100) {
+        const intermediateBlob = new Blob(downloadChunks.current);
+        downloadChunks.current = [intermediateBlob];
+      }
+    }
+  };
+
+  // Finalize download
+  const finalizeDownload = async (fileName: string) => {
+    if (fileWritableStream.current) {
+      // Close the stream
+      try {
+        await fileWritableStream.current.close();
+        fileWritableStream.current = null;
+        fileHandle.current = null;
+        console.log("✅ Stream closed, file saved to user's chosen location");
+        return null; // File already saved via stream
+      } catch (err) {
+        console.error("❌ Error closing stream:", err);
+      }
+    }
+    
+    // Fallback: Create and download blob
+    if (downloadChunks.current.length > 0) {
+      const blob = new Blob(downloadChunks.current);
+      downloadChunks.current = []; // Free memory
+      return blob;
+    }
+    
+    return null;
+  };
+
+  // Cleanup streaming resources
+  const cleanupStreamingDownload = () => {
+    if (fileWritableStream.current) {
+      fileWritableStream.current.abort().catch(() => {});
+      fileWritableStream.current = null;
+    }
+    fileHandle.current = null;
+    downloadChunks.current = [];
+    receivedChunks.current = [];
+    totalBytesReceived.current = 0;
+  };
 
   // Initialize Socket.io connection
   useEffect(() => {
@@ -251,6 +352,8 @@ export function useWebRTC() {
         clearInterval(statsIntervalRef.current);
         statsIntervalRef.current = null;
       }
+      // Cleanup streaming downloads
+      cleanupStreamingDownload();
     };
   }, []);
 
@@ -374,43 +477,68 @@ export function useWebRTC() {
           setCurrentFileName(metadata.name);
           receivedChunks.current = [];
           setTransferProgress(0);
+          
+          // Initialize streaming download
+          initializeStreamingDownload(metadata.name, metadata.size).catch(err => {
+            if (err?.name === 'AbortError') {
+              console.log("❌ User cancelled file download");
+              setCurrentFileName("");
+              setTransferProgress(0);
+            }
+          });
         } else if (metadata.type === "file-end") {
           console.log("✅ File transfer complete");
-          // Reconstruct file and trigger download immediately
-          const blob = new Blob(receivedChunks.current);
           const fileName = fileMetadata.current?.name || "unknown";
           
-          // Trigger download immediately
-          console.log("📥 Auto-downloading file:", fileName);
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = fileName;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          
-          // Update state after download is triggered
-          setReceivedFiles(prev => [...prev, {
-            name: fileName,
-            blob,
-          }]);
-          setTransferProgress(100);
-          
-          // Clean up URL and reset state after a short delay
-          setTimeout(() => {
-            URL.revokeObjectURL(url);
-            setCurrentFileName("");
-            setDownloadingFileIndex(null);
-            setTransferProgress(0);
-          }, 1000);
+          // Finalize the download
+          finalizeDownload(fileName).then(blob => {
+            if (blob) {
+              // Fallback method: trigger download
+              console.log("📥 Auto-downloading file (fallback method):", fileName);
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = fileName;
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+              setTimeout(() => URL.revokeObjectURL(url), 1000);
+            }
+            
+            // Update state - create a small placeholder blob for UI
+            const placeholderBlob = new Blob(["File downloaded"], { type: "text/plain" });
+            setReceivedFiles(prev => [...prev, {
+              name: fileName,
+              blob: placeholderBlob,
+            }]);
+            setTransferProgress(100);
+            
+            // Reset state
+            setTimeout(() => {
+              setCurrentFileName("");
+              setDownloadingFileIndex(null);
+              setTransferProgress(0);
+              cleanupStreamingDownload();
+            }, 1000);
+          }).catch(err => {
+            console.error("❌ Error finalizing download:", err);
+            cleanupStreamingDownload();
+          });
         }
       } else {
-        // File chunk
-        receivedChunks.current.push(event.data);
+        // File chunk - write to stream instead of accumulating in memory
+        if (fileWritableStream.current || downloadChunks.current) {
+          writeChunkToDownload(event.data).catch(err => {
+            console.error("❌ Error writing chunk:", err);
+          });
+        } else {
+          // Fallback to old method only if streaming not initialized
+          receivedChunks.current.push(event.data);
+        }
+        
         if (fileMetadata.current) {
-          const received = receivedChunks.current.reduce((acc, chunk) => acc + chunk.byteLength, 0);
-          const progress = Math.round((received / fileMetadata.current.size) * 100);
+          // Calculate progress based on actual bytes received
+          const progress = Math.min(99, Math.round((totalBytesReceived.current / fileMetadata.current.size) * 100));
           setTransferProgress(progress);
         }
       }
@@ -718,39 +846,64 @@ export function useWebRTC() {
               receivedChunks.current = [];
               setCurrentFileName(metadata.name);
               setTransferProgress(0);
+              
+              // Initialize streaming download
+              initializeStreamingDownload(metadata.name, metadata.size).catch(err => {
+                if (err?.name === 'AbortError') {
+                  console.log("❌ User cancelled file download");
+                  setCurrentFileName("");
+                  setTransferProgress(0);
+                }
+              });
             } else if (metadata.type === "file-end") {
               const fileName = fileMetadata.current?.name || "download";
               
-              // Construct blob and trigger download immediately
-              console.log("📥 Constructing and downloading file:", fileName);
-              const blob = new Blob(receivedChunks.current);
-              
-              // Trigger download immediately
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement("a");
-              a.href = url;
-              a.download = fileName;
-              document.body.appendChild(a);
-              a.click();
-              document.body.removeChild(a);
-              
-              // Update state after download is triggered
-              setReceivedFiles(prev => [...prev, { name: fileName, blob }]);
-              setTransferProgress(100);
-              
-              // Clean up URL and reset state after a short delay
-              setTimeout(() => {
-                URL.revokeObjectURL(url);
-                setCurrentFileName("");
-                setDownloadingFileIndex(null);
-                setTransferProgress(0);
-              }, 1000);
+              // Finalize the download
+              finalizeDownload(fileName).then(blob => {
+                if (blob) {
+                  // Fallback method: trigger download
+                  console.log("📥 Auto-downloading file (fallback method):", fileName);
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = fileName;
+                  document.body.appendChild(a);
+                  a.click();
+                  document.body.removeChild(a);
+                  setTimeout(() => URL.revokeObjectURL(url), 1000);
+                }
+                
+                // Update state - create a small placeholder blob for UI
+                const placeholderBlob = new Blob(["File downloaded"], { type: "text/plain" });
+                setReceivedFiles(prev => [...prev, { name: fileName, blob: placeholderBlob }]);
+                setTransferProgress(100);
+                
+                // Reset state
+                setTimeout(() => {
+                  setCurrentFileName("");
+                  setDownloadingFileIndex(null);
+                  setTransferProgress(0);
+                  cleanupStreamingDownload();
+                }, 1000);
+              }).catch(err => {
+                console.error("❌ Error finalizing download:", err);
+                cleanupStreamingDownload();
+              });
             }
           } else {
-            receivedChunks.current.push(e.data);
+            // File chunk - write to stream instead of accumulating in memory
+            if (fileWritableStream.current || downloadChunks.current) {
+              writeChunkToDownload(e.data).catch(err => {
+                console.error("❌ Error writing chunk:", err);
+              });
+            } else {
+              // Fallback to old method only if streaming not initialized
+              receivedChunks.current.push(e.data);
+            }
+            
             if (fileMetadata.current) {
-              const received = receivedChunks.current.reduce((acc, chunk) => acc + chunk.byteLength, 0);
-              const progress = Math.round((received / fileMetadata.current.size) * 100);
+              // Calculate progress based on actual bytes received
+              const progress = Math.min(99, Math.round((totalBytesReceived.current / fileMetadata.current.size) * 100));
               setTransferProgress(progress);
             }
           }

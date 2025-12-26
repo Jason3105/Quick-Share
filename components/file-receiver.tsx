@@ -106,6 +106,12 @@ export function FileReceiver({ onBack, initialRoomCode = "" }: FileReceiverProps
   };
 
   const handleDownload = (file: { name: string; blob: Blob }) => {
+    // Check if this is a placeholder blob (file was already downloaded via streaming)
+    if (file.blob.size < 100 && file.blob.type === "text/plain") {
+      console.log("File was already downloaded via streaming");
+      return;
+    }
+    
     const url = URL.createObjectURL(file.blob);
     const a = document.createElement("a");
     a.href = url;
@@ -374,17 +380,20 @@ export function FileReceiver({ onBack, initialRoomCode = "" }: FileReceiverProps
                   </div>
                 </div>
                 <div className="space-y-2 sm:space-y-3 max-h-64 overflow-y-auto pr-1">
-                  {receivedFiles.map((file, index) => (
+                  {receivedFiles.map((file, index) => {
+                    const isPlaceholder = file.blob.size < 100 && file.blob.type === "text/plain";
+                    return (
                     <div key={index} className="bg-white/60 dark:bg-black/30 rounded-lg p-3 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4">
                       <div className="flex items-center gap-3 flex-1 min-w-0 w-full sm:w-auto">
                         <FileDown className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
                         <div className="flex-1 min-w-0">
                           <p className="font-semibold text-sm break-words">{file.name}</p>
                           <p className="text-xs text-muted-foreground mt-0.5">
-                            {(file.blob.size / 1024 / 1024).toFixed(2)} MB
+                            {isPlaceholder ? "Saved to disk" : `${(file.blob.size / 1024 / 1024).toFixed(2)} MB`}
                           </p>
                         </div>
                       </div>
+                      {!isPlaceholder && (
                       <Button 
                         onClick={() => handleDownload(file)} 
                         size="sm"
@@ -395,17 +404,21 @@ export function FileReceiver({ onBack, initialRoomCode = "" }: FileReceiverProps
                         <span className="hidden sm:inline">Download Again</span>
                         <span className="sm:hidden">Download</span>
                       </Button>
+                      )}
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             </div>
 
+            {receivedFiles.some(f => f.blob.size >= 100 || f.blob.type !== "text/plain") && (
             <Button onClick={handleDownloadAll} variant="outline" className="w-full h-12 sm:h-14 text-base sm:text-lg shadow-lg hover:shadow-xl transition-all" size="lg">
               <Download className="mr-2 h-5 w-5 sm:h-6 sm:w-6" />
-              <span className="hidden xs:inline">Download All Again ({receivedFiles.length})</span>
-              <span className="xs:hidden">Download All ({receivedFiles.length})</span>
+              <span className="hidden xs:inline">Download All Again ({receivedFiles.filter(f => f.blob.size >= 100 || f.blob.type !== "text/plain").length})</span>
+              <span className="xs:hidden">Download All ({receivedFiles.filter(f => f.blob.size >= 100 || f.blob.type !== "text/plain").length})</span>
             </Button>
+            )}
 
             <div className="bg-green-50 dark:bg-green-950/50 p-5 rounded-lg border border-green-200 dark:border-green-800">
               <p className="text-xs sm:text-sm text-muted-foreground text-center">
