@@ -47,18 +47,16 @@ export function FileSender({ onBack }: FileSenderProps) {
   // Send file list when connection is established AND data channel is open - only once
   useEffect(() => {
     if (isConnected && files.length > 0 && dataChannel && !hasSharedFileList.current) {
-      // Add small delay to ensure data channel is fully ready
+      // Just mark as ready - don't send file list automatically
       const timer = setTimeout(() => {
         if (dataChannel.readyState === "open") {
-          console.log("🔗 Connection ready - sending file list");
-          sendFileList(files);
+          console.log("🔗 Connection ready - waiting for user to click Send");
           hasSharedFileList.current = true;
         } else {
           console.log("⏳ Data channel not open yet, waiting...");
           // Listen for open event
           dataChannel.addEventListener("open", () => {
-            console.log("🔗 Data channel now open - sending file list");
-            sendFileList(files);
+            console.log("🔗 Data channel now open - ready for user action");
             hasSharedFileList.current = true;
           }, { once: true });
         }
@@ -66,18 +64,7 @@ export function FileSender({ onBack }: FileSenderProps) {
       
       return () => clearTimeout(timer);
     }
-  }, [isConnected, files, sendFileList, dataChannel]);
-
-  // Handle download requests from receiver
-  useEffect(() => {
-    setFileRequestHandler(async (fileIndex: number) => {
-      console.log("📤 Sending file at index:", fileIndex);
-      if (files[fileIndex]) {
-        await sendFile(files[fileIndex]);
-        setFilesSentMap(prev => ({ ...prev, [fileIndex]: true }));
-      }
-    });
-  }, [files, sendFile, setFileRequestHandler]);
+  }, [isConnected, files, dataChannel]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = e.target.files;
@@ -95,10 +82,39 @@ export function FileSender({ onBack }: FileSenderProps) {
   };
 
   const handleSend = async () => {
-    if (files.length > 0 && isConnected) {
-      for (const file of files) {
-        await sendFile(file);
+    if (files.length === 0) {
+      console.error("No files to send");
+      return;
+    }
+    
+    if (!isConnected) {
+      console.error("Not connected to receiver");
+      return;
+    }
+    
+    if (!dataChannel || dataChannel.readyState !== "open") {
+      console.error("Data channel not ready, state:", dataChannel?.readyState);
+      return;
+    }
+    
+    try {
+      console.log("📤 Starting file transfer - sending", files.length, "file(s)");
+      
+      // Send files sequentially
+      for (let i = 0; i < files.length; i++) {
+        console.log(`📤 Sending file ${i + 1}/${files.length}:`, files[i].name);
+        await sendFile(files[i]);
+        setFilesSentMap(prev => ({ ...prev, [i]: true }));
+        
+        // Small delay between files to ensure clean state
+        if (i < files.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
       }
+      
+      console.log("✅ All files sent successfully");
+    } catch (error) {
+      console.error("❌ Error sending files:", error);
     }
   };
 
@@ -340,9 +356,18 @@ export function FileSender({ onBack }: FileSenderProps) {
               </div>
             </div>
 
-            <Button onClick={handleSend} disabled={transferProgress > 0 && transferProgress < 100} className="w-full shadow-lg hover:shadow-xl transition-all text-lg" size="lg">
+            <Button 
+              onClick={handleSend} 
+              disabled={!dataChannel || dataChannel.readyState !== 'open' || (transferProgress > 0 && transferProgress < 100)} 
+              className="w-full shadow-lg hover:shadow-xl transition-all text-lg" 
+              size="lg"
+            >
               <Send className="mr-2 h-5 w-5" />
-              {transferProgress > 0 && transferProgress < 100 ? 'Sending...' : 'Send Files Now'}
+              {transferProgress > 0 && transferProgress < 100 
+                ? 'Sending...' 
+                : !dataChannel || dataChannel.readyState !== 'open'
+                  ? 'Waiting for connection...'
+                  : 'Send Files Now'}
             </Button>
 
             {transferProgress > 0 && (
