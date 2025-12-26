@@ -37,34 +37,56 @@ app.prepare().then(() => {
 
     socket.on("create-room", ({ roomId }) => {
       socket.join(roomId);
-      rooms.set(roomId, { creator: socket.id, peers: [socket.id] });
-      socket.emit("room-joined", { roomId });
-      console.log(`Room created: ${roomId}`);
+      rooms.set(roomId, { 
+        creator: socket.id, 
+        sender: socket.id, 
+        receivers: [] 
+      });
+      socket.emit("room-joined", { roomId, role: 'sender' });
+      console.log(`Room created: ${roomId} by sender ${socket.id}`);
     });
 
     socket.on("join-room", ({ roomId }) => {
       console.log(`📥 join-room event received. Socket: ${socket.id}, Room: ${roomId}`);
       if (rooms.has(roomId)) {
         const room = rooms.get(roomId);
-        console.log(`   Room exists. Current peers:`, room.peers);
+        console.log(`   Room exists. Sender: ${room.sender}, Current receivers:`, room.receivers);
         
         // Check if this socket is already in the room to prevent duplicates
-        if (!room.peers.includes(socket.id)) {
+        if (!room.receivers.includes(socket.id) && socket.id !== room.sender) {
           socket.join(roomId);
-          room.peers.push(socket.id);
+          room.receivers.push(socket.id);
           
-          // Notify all peers in room about new peer (except the one joining)
-          console.log(`   📤 Emitting peer-joined to room ${roomId}`);
-          socket.to(roomId).emit("peer-joined", { peerId: socket.id });
+          // Notify sender about new receiver (not all peers)
+          console.log(`   📤 Notifying sender ${room.sender} about new receiver ${socket.id}`);
+          io.to(room.sender).emit("peer-joined", { 
+            peerId: socket.id,
+            receiverCount: room.receivers.length 
+          });
           
-          // Send current peer count to the joiner
-          console.log(`   📤 Emitting room-joined to ${socket.id}. Peer count: ${room.peers.length}`);
-          socket.emit("room-joined", { roomId, peerCount: room.peers.length });
-          console.log(`   ✅ Client ${socket.id} joined room: ${roomId}. Total peers: ${room.peers.length}`);
-        } else {
-          // Already in room, just confirm
-          socket.emit("room-joined", { roomId, peerCount: room.peers.length });
-          console.log(`   ⚠️  Client ${socket.id} already in room: ${roomId}`);
+          // Send confirmation to the receiver
+          console.log(`   📤 Emitting room-joined to receiver ${socket.id}. Total receivers: ${room.receivers.length}`);
+          socket.emit("room-joined", { 
+            roomId, 
+            role: 'receiver',
+            peerCount: room.receivers.length 
+          });
+          console.log(`   ✅ Receiver ${socket.id} joined room: ${roomId}. Total receivers: ${room.receivers.length}`);
+        } else if (room.receivers.includes(socket.id)) {
+          // Already in room as receiver, just confirm
+          socket.emit("room-joined", { 
+            roomId, 
+            role: 'receiver',
+            peerCount: room.receivers.length 
+          });
+          console.log(`   ⚠️  Receiver ${socket.id} already in room: ${roomId}`);
+        } else if (socket.id === room.sender) {
+          socket.emit("room-joined", { 
+            roomId, 
+            role: 'sender',
+            peerCount: room.receivers.length 
+          });
+          console.log(`   ⚠️  Sender ${socket.id} confirming room: ${roomId}`);
         }
       } else {
         console.log(`   ❌ Room ${roomId} not found!`);
@@ -73,21 +95,45 @@ app.prepare().then(() => {
     });
 
     socket.on("request-offer", ({ roomId }) => {
-      console.log(`📥 request-offer received from ${socket.id} for room ${roomId}`);
-      console.log(`   📤 Emitting offer-request to room ${roomId}`);
-      socket.to(roomId).emit("offer-request");
+      console.log(`📥 request-offer received from receiver ${socket.id} for room ${roomId}`);
+      const room = rooms.get(roomId);
+      if (room) {
+        // Send offer-request only to the sender, with receiver's ID
+        console.log(`   📤 Sending offer-request to sender ${room.sender} for receiver ${socket.id}`);
+        io.to(room.sender).emit("offer-request", { receiverId: socket.id });
+      }
     });
 
-    socket.on("offer", ({ roomId, offer }) => {
-      socket.to(roomId).emit("offer", { offer });
+    socket.on("offer", ({ roomId, offer, targetId }) => {
+      console.log(`📥 Received offer from ${socket.id} for target ${targetId}`);
+      // Send offer to specific receiver
+      if (targetId) {
+        io.to(targetId).emit("offer", { offer, senderId: socket.id });
+      } else {
+        // Fallback to broadcast (for backwards compatibility)
+        socket.to(roomId).emit("offer", { offer, senderId: socket.id });
+      }
     });
 
-    socket.on("answer", ({ roomId, answer }) => {
-      socket.to(roomId).emit("answer", { answer });
+    socket.on("answer", ({ roomId, answer, targetId }) => {
+      console.log(`📥 Received answer from ${socket.id} for target ${targetId}`);
+      // Send answer to specific sender
+      if (targetId) {
+        io.to(targetId).emit("answer", { answer, receiverId: socket.id });
+      } else {
+        // Fallback to broadcast
+        socket.to(roomId).emit("answer", { answer, receiverId: socket.id });
+      }
     });
 
-    socket.on("ice-candidate", ({ roomId, candidate }) => {
-      socket.to(roomId).emit("ice-candidate", { candidate });
+    socket.on("ice-candidate", ({ roomId, candidate, targetId }) => {
+      // Send ICE candidate to specific peer
+      if (targetId) {
+        io.to(targetId).emit("ice-candidate", { candidate, senderId: socket.id });
+      } else {
+        // Fallback to broadcast
+        socket.to(roomId).emit("ice-candidate", { candidate, senderId: socket.id });
+      }
     });
 
     socket.on("disconnect", () => {
@@ -95,15 +141,34 @@ app.prepare().then(() => {
       
       // Clean up rooms
       for (const [roomId, room] of rooms.entries()) {
-        const index = room.peers.indexOf(socket.id);
-        if (index > -1) {
-          room.peers.splice(index, 1);
-          socket.to(roomId).emit("peer-left");
+        // Check if disconnected socket was a receiver
+        const receiverIndex = room.receivers.indexOf(socket.id);
+        if (receiverIndex > -1) {
+          room.receivers.splice(receiverIndex, 1);
+          console.log(`Receiver ${socket.id} left room ${roomId}. Remaining receivers: ${room.receivers.length}`);
           
-          if (room.peers.length === 0) {
-            rooms.delete(roomId);
-            console.log(`Room deleted: ${roomId}`);
-          }
+          // Notify sender about receiver leaving
+          io.to(room.sender).emit("peer-left", { 
+            peerId: socket.id,
+            receiverCount: room.receivers.length 
+          });
+        }
+        
+        // Check if disconnected socket was the sender
+        if (room.sender === socket.id) {
+          console.log(`Sender ${socket.id} left room ${roomId}. Notifying all receivers.`);
+          
+          // Notify all receivers that sender disconnected
+          room.receivers.forEach(receiverId => {
+            io.to(receiverId).emit("sender-left");
+          });
+          
+          // Delete the room
+          rooms.delete(roomId);
+          console.log(`Room deleted: ${roomId}`);
+        } else if (room.receivers.length === 0 && room.sender !== socket.id) {
+          // Room has no receivers left (and sender didn't disconnect)
+          console.log(`Room ${roomId} has no receivers left`);
         }
       }
     });
