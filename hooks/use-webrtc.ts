@@ -63,6 +63,13 @@ export function useWebRTC() {
   const wakeLock = useRef<any>(null);
   const fileWriter = useRef<WritableStreamDefaultWriter<Uint8Array> | null>(null);
   const downloadStream = useRef<WritableStream<Uint8Array> | null>(null);
+  
+  // Transfer state tracking for reconnection handling
+  const activeTransferFile = useRef<File | null>(null);
+  const activeTransferIndex = useRef<number>(0);
+  const activeTotalFiles = useRef<number>(0);
+  const wasTransferring = useRef<boolean>(false);
+  const lastConnectionState = useRef<string>("");
 
   // Initialize streaming download for large files
   const initializeStreamingDownload = async (fileName: string, fileSize: number) => {
@@ -215,6 +222,23 @@ export function useWebRTC() {
     receivedChunks.current = [];
     totalBytesReceived.current = 0;
     downloadStarted.current = false;
+  };
+  
+  // Reset transfer state on disconnection
+  const resetTransferState = () => {
+    // Mark that we were transferring so we can resume
+    if (currentFileName || activeTransferFile.current) {
+      wasTransferring.current = true;
+      console.log("🔄 Marked transfer as interrupted for restart on reconnection");
+    }
+    
+    // Cleanup download resources
+    cleanupStreamingDownload();
+    
+    // Reset file metadata
+    fileMetadata.current = null;
+    
+    console.log("🔄 Transfer state reset due to disconnection");
   };
 
   // Request wake lock to prevent screen sleep during transfer
@@ -585,6 +609,9 @@ export function useWebRTC() {
       setDataChannelReady(false);
       setIsConnected(false);
       setConnectionState("Disconnected");
+      
+      // Reset transfer state on disconnect
+      resetTransferState();
     };
 
     channel.onerror = (error) => {
@@ -602,6 +629,16 @@ export function useWebRTC() {
           // Receiver gets list of available files
           console.log("📂 Received file list:", metadata.files);
           setAvailableFiles(metadata.files);
+        } else if (metadata.type === "restart-transfer") {
+          // Request to restart transfer after reconnection
+          console.log("🔄 Received restart-transfer request for file:", metadata.fileIndex);
+          if (onFileRequestCallback.current && metadata.fileIndex !== undefined) {
+            // Reset UI state
+            setCurrentFileName("");
+            setTransferProgress(0);
+            // Trigger the file request
+            onFileRequestCallback.current(metadata.fileIndex);
+          }
         } else if (metadata.type === "download-request") {
           // Sender receives download request from receiver
           console.log("📥 Received download request for file:", metadata.fileIndex);
@@ -744,14 +781,45 @@ export function useWebRTC() {
 
       pc.onconnectionstatechange = () => {
         console.log("🔗 Connection state:", pc.connectionState);
+        const previousState = lastConnectionState.current;
+        lastConnectionState.current = pc.connectionState;
+        
         setConnectionState(pc.connectionState);
         setIsConnected(pc.connectionState === "connected");
         
         if (pc.connectionState === "connected") {
           reconnectAttempts.current = 0;
+          
+          // Check if we just reconnected from a disconnection
+          if ((previousState === "disconnected" || previousState === "failed") && wasTransferring.current) {
+            console.log("✅ Sender reconnected - preparing to restart transfer");
+            
+            // Wait for data channel to be ready
+            setTimeout(() => {
+              if (channel && channel.readyState === "open" && activeTransferFile.current) {
+                console.log("🔄 Sending restart-transfer signal to receiver");
+                try {
+                  channel.send(JSON.stringify({
+                    type: "restart-transfer",
+                    fileIndex: activeTransferIndex.current
+                  }));
+                  
+                  // Also trigger local restart via callback
+                  if (onFileRequestCallback.current) {
+                    wasTransferring.current = false;
+                    onFileRequestCallback.current(activeTransferIndex.current);
+                  }
+                } catch (err) {
+                  console.error("❌ Error sending restart signal:", err);
+                }
+              }
+            }, 1000);
+          }
         } else if (pc.connectionState === "disconnected") {
           // Auto-reconnect on disconnect
           console.log("⚠️ Connection disconnected, attempting reconnect...");
+          resetTransferState();
+          
           if (reconnectAttempts.current < maxReconnectAttempts) {
             reconnectAttempts.current++;
             setTimeout(() => {
@@ -764,6 +832,7 @@ export function useWebRTC() {
         } else if (pc.connectionState === "failed") {
           console.error("❌ Connection failed");
           setConnectionState("Connection failed - Try reloading or retry");
+          resetTransferState();
         }
       };
 
@@ -808,6 +877,9 @@ export function useWebRTC() {
         setIsConnected(false);
         setDataChannelReady(false);
         
+        // Reset transfer state
+        resetTransferState();
+        
         // Clear stats monitoring
         if (statsIntervalRef.current) {
           clearInterval(statsIntervalRef.current);
@@ -819,6 +891,13 @@ export function useWebRTC() {
         if (typeof event.data === "string") {
           const metadata = JSON.parse(event.data);
           if (metadata.type === "download-request" && onFileRequestCallback.current) {
+            onFileRequestCallback.current(metadata.fileIndex);
+          } else if (metadata.type === "restart-transfer" && onFileRequestCallback.current && metadata.fileIndex !== undefined) {
+            // Receiver wants to restart after reconnection
+            console.log("🔄 Received restart-transfer request from receiver for file:", metadata.fileIndex);
+            wasTransferring.current = false;
+            setCurrentFileName("");
+            setTransferProgress(0);
             onFileRequestCallback.current(metadata.fileIndex);
           }
         }
@@ -932,6 +1011,9 @@ export function useWebRTC() {
 
       pc.onconnectionstatechange = () => {
         console.log("🔗 Connection state:", pc.connectionState);
+        const previousState = lastConnectionState.current;
+        lastConnectionState.current = pc.connectionState;
+        
         setConnectionState(pc.connectionState);
         const connected = pc.connectionState === "connected";
         setIsConnected(connected);
@@ -944,8 +1026,36 @@ export function useWebRTC() {
           }
           isJoining.current = false;
           reconnectAttempts.current = 0;
+          
+          // Check if we just reconnected - request transfer restart if needed
+          if ((previousState === "disconnected" || previousState === "failed") && wasTransferring.current) {
+            console.log("✅ Receiver reconnected - will wait for sender to restart or send signal");
+            
+            // Try to signal sender to restart
+            setTimeout(() => {
+              const dataChannelFromPC = Array.from((pc as any).sctp?.transport?.dataChannelStreams || []).find((ch: any) => ch?.label === "fileTransfer");
+              if (dataChannelFromPC && (dataChannelFromPC as any).readyState === "open") {
+                try {
+                  (dataChannelFromPC as any).send(JSON.stringify({
+                    type: "restart-transfer",
+                    fileIndex: activeTransferIndex.current
+                  }));
+                  console.log("🔄 Sent restart signal to sender");
+                } catch (err) {
+                  console.error("❌ Error sending restart signal:", err);
+                }
+              }
+            }, 1000);
+            
+            wasTransferring.current = false;
+            setCurrentFileName("");
+            setTransferProgress(0);
+          }
         } else if (pc.connectionState === "disconnected") {
           // Auto-reconnect on disconnect
+          console.log("⚠️ Receiver disconnected, resetting transfer state");
+          resetTransferState();
+          
           if (reconnectAttempts.current < maxReconnectAttempts) {
             reconnectAttempts.current++;
             setTimeout(() => {
@@ -958,6 +1068,7 @@ export function useWebRTC() {
         } else if (pc.connectionState === "failed" || pc.connectionState === "closed") {
           // Allow retry on failure
           isJoining.current = false;
+          resetTransferState();
         }
       };
 
@@ -977,6 +1088,9 @@ export function useWebRTC() {
           console.log("❌ Data channel closed");
           setIsConnected(false);
           setDataChannelReady(false);
+          
+          // Reset transfer state
+          resetTransferState();
         };
 
         channel.onmessage = (e) => {
@@ -1122,6 +1236,12 @@ export function useWebRTC() {
 
   // Send file with adaptive chunking and optimized flow control
   const sendFile = useCallback(async (file: File, fileIndex: number = 0, totalFiles: number = 1): Promise<void> => {
+    // Track this transfer for reconnection handling
+    activeTransferFile.current = file;
+    activeTransferIndex.current = fileIndex;
+    activeTotalFiles.current = totalFiles;
+    wasTransferring.current = true;
+    
     // Check if data channel exists first
     if (!dataChannel) {
       throw new Error("No data channel - connection not established");
@@ -1233,6 +1353,10 @@ export function useWebRTC() {
             channel.send(JSON.stringify({ type: "file-end" }));
             setTransferProgress(100);
             
+            // Clear transfer tracking on successful completion
+            wasTransferring.current = false;
+            activeTransferFile.current = null;
+            
             // Release wake lock after send completes
             releaseWakeLock();
             
@@ -1240,6 +1364,8 @@ export function useWebRTC() {
           }
         } catch (error) {
           console.error("Error sending chunk:", error);
+          wasTransferring.current = false;
+          activeTransferFile.current = null;
           releaseWakeLock(); // Release on error too
           reject(error);
         }
