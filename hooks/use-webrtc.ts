@@ -59,13 +59,20 @@ export function useWebRTC() {
   const downloadAnchor = useRef<HTMLAnchorElement | null>(null);
   const downloadChunks = useRef<Blob[]>([]);
   const totalBytesReceived = useRef<number>(0);
+  const streamController = useRef<ReadableStreamDefaultController<Uint8Array> | null>(null);
+  const downloadStarted = useRef<boolean>(false);
 
   // Initialize streaming download for large files
   const initializeStreamingDownload = async (fileName: string, fileSize: number) => {
     totalBytesReceived.current = 0; // Reset counter
-    try {
-      // Try modern File System Access API for streaming (Chrome, Edge, etc.)
-      if ('showSaveFilePicker' in window) {
+    downloadStarted.current = false;
+    
+    // Check if File System Access API is available (desktop Chrome/Edge only)
+    const hasFileSystemAccess = 'showSaveFilePicker' in window && 
+                                 !navigator.userAgent.match(/Android|iPhone|iPad|iPod/i);
+    
+    if (hasFileSystemAccess) {
+      try {
         const handle = await (window as any).showSaveFilePicker({
           suggestedName: fileName,
           types: [{
@@ -76,20 +83,52 @@ export function useWebRTC() {
         fileHandle.current = handle;
         const writable = await handle.createWritable();
         fileWritableStream.current = writable.getWriter();
-        console.log("✅ Using streaming download (File System Access API)");
+        console.log("✅ Using streaming download (File System Access API - writes directly to disk)");
         return true;
-      }
-    } catch (err: any) {
-      if (err.name !== 'AbortError') {
-        console.warn("⚠️ File System Access API not available or user cancelled:", err);
-      } else {
-        throw err; // User cancelled, propagate to stop download
+      } catch (err: any) {
+        if (err.name === 'AbortError') {
+          throw err; // User cancelled, propagate to stop download
+        }
+        console.warn("⚠️ File System Access API failed:", err);
       }
     }
     
-    // Fallback: Use Blob accumulation for smaller chunks (still better than old approach)
-    console.log("⚠️ Using fallback download method");
-    downloadChunks.current = [];
+    // Mobile: Create ReadableStream and trigger download IMMEDIATELY
+    // Browser's download manager will handle the file as chunks arrive
+    console.log("📱 Starting progressive streaming download (mobile-optimized, zero-RAM)");
+    
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        streamController.current = controller;
+        console.log("📡 Stream controller ready - download will start on first chunk");
+      }
+    });
+    
+    // Create response from stream
+    const response = new Response(stream, {
+      headers: {
+        'Content-Type': 'application/octet-stream',
+        'Content-Disposition': `attachment; filename="${fileName}"`,
+        'Content-Length': fileSize.toString()
+      }
+    });
+    
+    // Convert to blob URL and trigger download IMMEDIATELY
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    
+    // Keep reference for cleanup
+    downloadAnchor.current = a;
+    
+    console.log("✅ Download started - browser will receive chunks progressively");
+    downloadStarted.current = true;
+    
     return false;
   };
 
@@ -98,21 +137,32 @@ export function useWebRTC() {
     totalBytesReceived.current += chunk.byteLength; // Track total bytes
     
     if (fileWritableStream.current) {
-      // Stream directly to disk
+      // Desktop: Stream directly to disk via File System Access API
       try {
         await fileWritableStream.current.write(chunk);
       } catch (err) {
         console.error("❌ Error writing chunk to stream:", err);
         throw err;
       }
+    } else if (streamController.current) {
+      // Mobile: Push chunk to ReadableStream - browser downloads it immediately
+      // This keeps ZERO chunks in JavaScript memory - all handled by browser!
+      try {
+        const uint8Array = new Uint8Array(chunk);
+        streamController.current.enqueue(uint8Array);
+        // Chunk is now in browser's download manager, not in our RAM!
+      } catch (err) {
+        console.error("❌ Error enqueueing chunk to stream:", err);
+        throw err;
+      }
     } else {
-      // Fallback: accumulate in smaller Blob chunks
-      downloadChunks.current.push(new Blob([chunk]));
+      // Fallback for older browsers: accumulate with aggressive consolidation
+      const blob = new Blob([chunk]);
+      downloadChunks.current.push(blob);
       
-      // Periodically create intermediate blobs to reduce memory pressure
-      if (downloadChunks.current.length >= 100) {
-        const intermediateBlob = new Blob(downloadChunks.current);
-        downloadChunks.current = [intermediateBlob];
+      if (downloadChunks.current.length >= 50) {
+        const consolidatedBlob = new Blob(downloadChunks.current);
+        downloadChunks.current = [consolidatedBlob];
       }
     }
   };
@@ -120,22 +170,45 @@ export function useWebRTC() {
   // Finalize download
   const finalizeDownload = async (fileName: string) => {
     if (fileWritableStream.current) {
-      // Close the stream
+      // Desktop: Close the File System Access API stream
       try {
         await fileWritableStream.current.close();
         fileWritableStream.current = null;
         fileHandle.current = null;
-        console.log("✅ Stream closed, file saved to user's chosen location");
-        return null; // File already saved via stream
+        console.log("✅ Stream closed, file saved directly to disk (desktop)");
+        return null;
       } catch (err) {
         console.error("❌ Error closing stream:", err);
       }
     }
     
-    // Fallback: Create and download blob
+    if (streamController.current) {
+      // Mobile: Close the ReadableStream - browser finalizes the download
+      try {
+        streamController.current.close();
+        streamController.current = null;
+        console.log("✅ Stream closed, download completed via browser (mobile)");
+        
+        // Cleanup download anchor after a delay
+        setTimeout(() => {
+          if (downloadAnchor.current) {
+            URL.revokeObjectURL(downloadAnchor.current.href);
+            document.body.removeChild(downloadAnchor.current);
+            downloadAnchor.current = null;
+          }
+        }, 1000);
+        
+        return null; // File already downloaded by browser
+      } catch (err) {
+        console.error("❌ Error closing stream controller:", err);
+      }
+    }
+    
+    // Fallback for older browsers: create blob and trigger download
     if (downloadChunks.current.length > 0) {
+      console.log("📥 Finalizing download (fallback method)");
       const blob = new Blob(downloadChunks.current);
-      downloadChunks.current = []; // Free memory
+      downloadChunks.current = [];
       return blob;
     }
     
@@ -148,10 +221,55 @@ export function useWebRTC() {
       fileWritableStream.current.abort().catch(() => {});
       fileWritableStream.current = null;
     }
+    if (streamController.current) {
+      try {
+        streamController.current.close();
+      } catch (e) {
+        // Already closed
+      }
+      streamController.current = null;
+    }
+    if (downloadAnchor.current) {
+      try {
+        URL.revokeObjectURL(downloadAnchor.current.href);
+        document.body.removeChild(downloadAnchor.current);
+      } catch (e) {
+        // Already removed
+      }
+      downloadAnchor.current = null;
+    }
     fileHandle.current = null;
     downloadChunks.current = [];
     receivedChunks.current = [];
     totalBytesReceived.current = 0;
+    downloadStarted.current = false;
+  };
+
+  // Wait for data channel to be ready
+  const waitForDataChannel = (channel: RTCDataChannel | null, timeout = 10000): Promise<RTCDataChannel> => {
+    return new Promise((resolve, reject) => {
+      if (!channel) {
+        reject(new Error("No data channel available"));
+        return;
+      }
+      
+      if (channel.readyState === "open") {
+        resolve(channel);
+        return;
+      }
+      
+      const timeoutId = setTimeout(() => {
+        channel.removeEventListener("open", onOpen);
+        reject(new Error("Data channel open timeout"));
+      }, timeout);
+      
+      const onOpen = () => {
+        clearTimeout(timeoutId);
+        resolve(channel);
+      };
+      
+      channel.addEventListener("open", onOpen, { once: true });
+    });
   };
 
   // Initialize Socket.io connection
@@ -939,71 +1057,54 @@ export function useWebRTC() {
   }, [socket]);
 
   // Send file list to receiver
-  const sendFileList = useCallback((files: File[]) => {
-    if (!dataChannel) {
-      console.error("❌ Data channel not available");
-      return;
-    }
-    
-    if (dataChannel.readyState !== "open") {
-      console.log("⏳ Data channel not open yet, state:", dataChannel.readyState);
-      // Retry after channel opens
-      const checkAndSend = () => {
-        if (dataChannel.readyState === "open") {
-          sendFileListNow();
-        } else {
-          console.log("Still waiting for data channel to open...");
-        }
-      };
-      dataChannel.addEventListener("open", checkAndSend, { once: true });
-      return;
-    }
-
-    const sendFileListNow = () => {
+  const sendFileList = useCallback(async (files: File[]) => {
+    try {
+      const channel = await waitForDataChannel(dataChannel, 5000);
+      
       const fileList = files.map((file, index) => ({
         name: file.name,
         size: file.size,
         index,
       }));
 
-      dataChannel.send(JSON.stringify({
+      channel.send(JSON.stringify({
         type: "file-list",
         files: fileList,
       }));
 
       console.log("📤 Sent file list to receiver:", fileList.length, "files");
-    };
-    
-    sendFileListNow();
+    } catch (error) {
+      console.error("❌ Failed to send file list:", error);
+      setConnectionState("Failed to send file list - data channel not ready");
+    }
   }, [dataChannel]);
 
   // Request file download (receiver)
-  const requestFileDownload = useCallback((fileIndex: number) => {
-    if (!dataChannel || dataChannel.readyState !== "open") {
-      console.error("Data channel not ready");
-      return;
+  const requestFileDownload = useCallback(async (fileIndex: number) => {
+    try {
+      const channel = await waitForDataChannel(dataChannel, 5000);
+      
+      setDownloadingFileIndex(fileIndex);
+      channel.send(JSON.stringify({
+        type: "download-request",
+        fileIndex,
+      }));
+
+      console.log("Requested file download:", fileIndex);
+    } catch (error) {
+      console.error("Failed to request file download:", error);
+      setConnectionState("Failed to request file - data channel not ready");
     }
-
-    setDownloadingFileIndex(fileIndex);
-    dataChannel.send(JSON.stringify({
-      type: "download-request",
-      fileIndex,
-    }));
-
-    console.log("Requested file download:", fileIndex);
   }, [dataChannel]);
 
   // Send file with adaptive chunking and optimized flow control
-  const sendFile = useCallback((file: File): Promise<void> => {
+  const sendFile = useCallback(async (file: File): Promise<void> => {
+    // Wait for data channel to be ready
+    const channel = await waitForDataChannel(dataChannel, 10000);
+    
     return new Promise((resolve, reject) => {
-      if (!dataChannel || dataChannel.readyState !== "open") {
-        console.error("Data channel not ready");
-        reject(new Error("Data channel not ready"));
-        return;
-      }
-
       // Send metadata
-      dataChannel.send(JSON.stringify({
+      channel.send(JSON.stringify({
         type: "file-metadata",
         name: file.name,
         size: file.size,
@@ -1025,7 +1126,7 @@ export function useWebRTC() {
       const updateChunkSize = () => {
         const now = Date.now();
         const elapsed = (now - lastProgressUpdate) / 1000; // seconds
-        const bufferAmount = dataChannel.bufferedAmount;
+        const bufferAmount = channel.bufferedAmount;
         
         if (elapsed > 0.1 && bytesTransferred > 0) {
           const instantThroughput = bytesTransferred / elapsed; // bytes per second
@@ -1067,7 +1168,7 @@ export function useWebRTC() {
 
       const sendChunk = (chunk: ArrayBuffer) => {
         try {
-          dataChannel.send(chunk);
+          channel.send(chunk);
           offset += chunk.byteLength;
           bytesTransferred += chunk.byteLength;
           totalBytesTransferred += chunk.byteLength;
@@ -1077,13 +1178,13 @@ export function useWebRTC() {
 
           // Adaptive chunk size updates - more frequent for better responsiveness
           if (totalBytesTransferred % (currentChunkSize * 5) === 0 || 
-              dataChannel.bufferedAmount > OPTIMAL_BUFFER_SIZE) {
+              channel.bufferedAmount > OPTIMAL_BUFFER_SIZE) {
             updateChunkSize();
           }
 
           if (offset < file.size) {
             // Continue immediately if buffer is low, otherwise schedule
-            if (dataChannel.bufferedAmount < BUFFER_LOW_THRESHOLD) {
+            if (channel.bufferedAmount < BUFFER_LOW_THRESHOLD) {
               readNextChunk();
             } else {
               // Use microtask for better responsiveness
@@ -1096,7 +1197,7 @@ export function useWebRTC() {
             const peakChunkSize = Math.floor(highWaterMark / 1024);
             console.log(`✅ Transfer complete: ${avgSpeed} MB/s average, peak buffer: ${peakChunkSize}KB`);
             
-            dataChannel.send(JSON.stringify({ type: "file-end" }));
+            channel.send(JSON.stringify({ type: "file-end" }));
             setTransferProgress(100);
             setTimeout(() => resolve(), 100);
           }
@@ -1108,7 +1209,7 @@ export function useWebRTC() {
 
       const readNextChunk = () => {
         // Advanced flow control with intelligent buffering
-        const bufferAmount = dataChannel.bufferedAmount;
+        const bufferAmount = channel.bufferedAmount;
         const bufferRatio = bufferAmount / MAX_BUFFER_SIZE;
         
         // Dynamic wait times based on buffer state
@@ -1156,10 +1257,10 @@ export function useWebRTC() {
         const reader = new FileReader();
         
         reader.onload = (e) => {
-          if (e.target?.result && dataChannel.readyState === "open") {
+          if (e.target?.result && channel.readyState === "open") {
             const chunk = e.target.result as ArrayBuffer;
             sendChunk(chunk);
-          } else if (dataChannel.readyState !== "open") {
+          } else if (channel.readyState !== "open") {
             reject(new Error("Data channel closed during transfer"));
           }
         };

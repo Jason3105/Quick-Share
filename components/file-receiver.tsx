@@ -331,7 +331,11 @@ export function FileReceiver({ onBack, initialRoomCode = "" }: FileReceiverProps
                   style={{ width: `${progress}%` }}
                 />
               </div>
-              <p className="text-xs text-center text-muted-foreground">Transfer in progress • Do not close this page</p>
+              <p className="text-xs text-center text-muted-foreground">
+                {typeof window !== 'undefined' && navigator.userAgent.match(/Android|iPhone|iPad|iPod/i)
+                  ? 'Downloading to your device in real-time • Check your downloads'
+                  : 'Transfer in progress • Do not close this page'}
+              </p>
             </div>
           </div>
         )}
@@ -422,7 +426,9 @@ export function FileReceiver({ onBack, initialRoomCode = "" }: FileReceiverProps
 
             <div className="bg-green-50 dark:bg-green-950/50 p-5 rounded-lg border border-green-200 dark:border-green-800">
               <p className="text-xs sm:text-sm text-muted-foreground text-center">
-                ✓ <strong>Success:</strong> Files have been automatically saved to your Downloads folder. You can close this page now.
+                ✓ <strong>Success:</strong> {typeof window !== 'undefined' && 'showSaveFilePicker' in window && !navigator.userAgent.match(/Android|iPhone|iPad|iPod/i) 
+                  ? 'File has been saved to your chosen location.' 
+                  : 'File has been downloaded progressively - check your Downloads folder.'} You can close this page now.
               </p>
             </div>
           </div>
