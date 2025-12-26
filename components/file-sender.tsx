@@ -29,7 +29,8 @@ export function FileSender({ onBack }: FileSenderProps) {
     transferProgress,
     createRoom,
     peersConnected,
-    dataChannel
+    dataChannel,
+    dataChannelReady
   } = useWebRTC();
 
   useEffect(() => {
@@ -46,25 +47,11 @@ export function FileSender({ onBack }: FileSenderProps) {
 
   // Send file list when connection is established AND data channel is open - only once
   useEffect(() => {
-    if (isConnected && files.length > 0 && dataChannel && !hasSharedFileList.current) {
-      // Just mark as ready - don't send file list automatically
-      const timer = setTimeout(() => {
-        if (dataChannel.readyState === "open") {
-          console.log("🔗 Connection ready - waiting for user to click Send");
-          hasSharedFileList.current = true;
-        } else {
-          console.log("⏳ Data channel not open yet, waiting...");
-          // Listen for open event
-          dataChannel.addEventListener("open", () => {
-            console.log("🔗 Data channel now open - ready for user action");
-            hasSharedFileList.current = true;
-          }, { once: true });
-        }
-      }, 200);
-      
-      return () => clearTimeout(timer);
+    if (isConnected && dataChannelReady && files.length > 0 && !hasSharedFileList.current) {
+      console.log("🔗 Connection ready - waiting for user to click Send");
+      hasSharedFileList.current = true;
     }
-  }, [isConnected, files, dataChannel]);
+  }, [isConnected, dataChannelReady, files]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = e.target.files;
@@ -87,13 +74,8 @@ export function FileSender({ onBack }: FileSenderProps) {
       return;
     }
     
-    if (!isConnected) {
-      console.error("Not connected to receiver");
-      return;
-    }
-    
-    if (!dataChannel || dataChannel.readyState !== "open") {
-      console.error("Data channel not ready, state:", dataChannel?.readyState);
+    if (!isConnected || !dataChannelReady) {
+      console.error("Not connected or data channel not ready");
       return;
     }
     
@@ -358,14 +340,14 @@ export function FileSender({ onBack }: FileSenderProps) {
 
             <Button 
               onClick={handleSend} 
-              disabled={!dataChannel || dataChannel.readyState !== 'open' || (transferProgress > 0 && transferProgress < 100)} 
+              disabled={!dataChannelReady || (transferProgress > 0 && transferProgress < 100)} 
               className="w-full shadow-lg hover:shadow-xl transition-all text-lg" 
               size="lg"
             >
               <Send className="mr-2 h-5 w-5" />
               {transferProgress > 0 && transferProgress < 100 
                 ? 'Sending...' 
-                : !dataChannel || dataChannel.readyState !== 'open'
+                : !dataChannelReady
                   ? 'Waiting for connection...'
                   : 'Send Files Now'}
             </Button>

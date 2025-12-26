@@ -23,6 +23,7 @@ export function useWebRTC() {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [peerConnection, setPeerConnection] = useState<RTCPeerConnection | null>(null);
   const [dataChannel, setDataChannel] = useState<RTCDataChannel | null>(null);
+  const [dataChannelReady, setDataChannelReady] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   const [connectionState, setConnectionState] = useState("Not connected");
   const [transferProgress, setTransferProgress] = useState(0);
@@ -543,18 +544,21 @@ export function useWebRTC() {
 
     channel.onopen = () => {
       console.log("✅ Data channel opened! Connection ready.");
+      setDataChannelReady(true);
       setIsConnected(true);
       setConnectionState("Connected - Ready to transfer");
     };
 
     channel.onclose = () => {
       console.log("Data channel closed");
+      setDataChannelReady(false);
       setIsConnected(false);
       setConnectionState("Disconnected");
     };
 
     channel.onerror = (error) => {
       console.error("Data channel error:", error);
+      setDataChannelReady(false);
     };
 
     channel.onmessage = (event) => {
@@ -1326,6 +1330,7 @@ export function useWebRTC() {
     // Reset state
     setPeerConnection(null);
     setDataChannel(null);
+    setDataChannelReady(false);
     setIsConnected(false);
     setConnectionState("Not connected");
   }, []);
@@ -1347,6 +1352,7 @@ export function useWebRTC() {
     availableFiles,
     downloadingFileIndex,
     dataChannel,
+    dataChannelReady,
     socket,
   };
 }
