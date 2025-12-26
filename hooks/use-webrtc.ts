@@ -542,6 +542,14 @@ export function useWebRTC() {
   const setupDataChannel = (channel: RTCDataChannel) => {
     channel.binaryType = "arraybuffer";
 
+    // Check if channel is already open (race condition fix)
+    if (channel.readyState === "open") {
+      console.log("✅ Data channel already open! Connection ready.");
+      setDataChannelReady(true);
+      setIsConnected(true);
+      setConnectionState("Connected - Ready to transfer");
+    }
+
     channel.onopen = () => {
       console.log("✅ Data channel opened! Connection ready.");
       setDataChannelReady(true);
