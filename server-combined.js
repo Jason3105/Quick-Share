@@ -109,6 +109,50 @@ app.prepare().then(() => {
     });
   });
 
+  // Self-ping system to prevent Render from sleeping
+  const PING_INTERVAL = 5 * 60 * 1000; // 5 minutes
+  const HEALTH_URL = process.env.SELF_PING_URL || 'https://quicksharep2p.onrender.com/api/health';
+  
+  let selfPingInterval;
+  
+  const selfPing = async () => {
+    try {
+      const https = require('https');
+      const http = require('http');
+      const protocol = HEALTH_URL.startsWith('https') ? https : http;
+      
+      const startTime = Date.now();
+      const req = protocol.get(HEALTH_URL, (res) => {
+        const responseTime = Date.now() - startTime;
+        let data = '';
+        
+        res.on('data', (chunk) => {
+          data += chunk;
+        });
+        
+        res.on('end', () => {
+          if (res.statusCode === 200) {
+            console.log(`✅ Self-ping successful (${responseTime}ms):`, HEALTH_URL);
+          } else {
+            console.warn(`⚠️ Self-ping returned status ${res.statusCode}`);
+          }
+        });
+      });
+      
+      req.on('error', (error) => {
+        console.error('❌ Self-ping failed:', error.message);
+      });
+      
+      req.setTimeout(10000, () => {
+        req.destroy();
+        console.error('❌ Self-ping timed out after 10s');
+      });
+      
+    } catch (error) {
+      console.error('❌ Self-ping error:', error.message);
+    }
+  };
+
   httpServer
     .once("error", (err) => {
       console.error(err);
@@ -117,5 +161,33 @@ app.prepare().then(() => {
     .listen(port, () => {
       console.log(`> Ready on http://${hostname}:${port}`);
       console.log(`> Socket.io server integrated`);
+      
+      // Start self-ping system only in production
+      if (!dev && HEALTH_URL.includes('onrender.com')) {
+        console.log(`🔄 Self-ping system starting - will ping ${HEALTH_URL} every 5 minutes`);
+        
+        // Initial ping after 2 minutes (give server time to fully start)
+        setTimeout(() => {
+          console.log('🚀 Running initial self-ping...');
+          selfPing();
+          
+          // Then set up regular interval
+          selfPingInterval = setInterval(selfPing, PING_INTERVAL);
+        }, 2 * 60 * 1000);
+      } else {
+        console.log('ℹ️  Self-ping system disabled (development mode or not on Render)');
+      }
     });
+  
+  // Cleanup on server shutdown
+  process.on('SIGTERM', () => {
+    console.log('🛑 SIGTERM received, shutting down gracefully...');
+    if (selfPingInterval) {
+      clearInterval(selfPingInterval);
+    }
+    httpServer.close(() => {
+      console.log('👋 Server closed');
+      process.exit(0);
+    });
+  });
 });
