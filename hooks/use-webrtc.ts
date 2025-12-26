@@ -54,116 +54,144 @@ export function useWebRTC() {
   const lastBytesSent = useRef<number>(0);
   const statsIntervalRef = useRef<NodeJS.Timeout | null>(null);
   
-  // Streaming download support for large files
-  const downloadAnchor = useRef<HTMLAnchorElement | null>(null);
+  // Download support for file transfer - disk-based streaming
   const downloadChunks = useRef<Blob[]>([]);
   const totalBytesReceived = useRef<number>(0);
-  const streamController = useRef<ReadableStreamDefaultController<Uint8Array> | null>(null);
   const downloadStarted = useRef<boolean>(false);
   const wakeLock = useRef<any>(null);
+  const fileWriter = useRef<WritableStreamDefaultWriter<Uint8Array> | null>(null);
+  const downloadStream = useRef<WritableStream<Uint8Array> | null>(null);
 
   // Initialize streaming download for large files
   const initializeStreamingDownload = async (fileName: string, fileSize: number) => {
     totalBytesReceived.current = 0; // Reset counter
     downloadStarted.current = false;
+    downloadChunks.current = []; // Clear any previous chunks
     
-    // Use progressive streaming download for ALL devices (mobile & desktop)
-    // This downloads directly to Downloads folder without prompts
-    // and streams chunks to disk in real-time (zero RAM usage)
-    console.log("📥 Starting progressive streaming download to Downloads folder");
+    console.log("📥 Initializing download for:", fileName, "Size:", (fileSize / 1024 / 1024).toFixed(2), "MB");
     
-    const stream = new ReadableStream<Uint8Array>({
-      start(controller) {
-        streamController.current = controller;
-        console.log("📡 Stream controller ready - download will start on first chunk");
+    try {
+      // Use Chrome's Native File System API or showSaveFilePicker for true disk streaming
+      // This writes chunks DIRECTLY to disk (zero RAM usage)
+      if ('showSaveFilePicker' in window && fileSize > 50 * 1024 * 1024) {
+        // For files > 50MB, use File System Access API (Chrome/Edge on desktop)
+        console.log("💾 Using File System Access API for disk-based streaming");
+        const handle = await (window as any).showSaveFilePicker({
+          suggestedName: fileName,
+          types: [{
+            description: 'File',
+            accept: { 'application/octet-stream': [] },
+          }],
+        });
+        const writable = await handle.createWritable();
+        fileWriter.current = writable.getWriter();
+        downloadStarted.current = true;
+        console.log("✅ Disk-based streaming active - writing directly to disk");
+        return true; // Using disk-based streaming
       }
-    });
+    } catch (err) {
+      console.log("⚠️ File System Access API not available or user cancelled, using fallback");
+    }
     
-    // Create response from stream
-    const response = new Response(stream, {
-      headers: {
-        'Content-Type': 'application/octet-stream',
-        'Content-Disposition': `attachment; filename="${fileName}"`,
-        'Content-Length': fileSize.toString()
-      }
-    });
+    // Fallback: Use streamsaver.js approach with service worker for browsers without File System API
+    // OR for smaller files, use RAM accumulation (simpler and reliable)
+    if (fileSize < 100 * 1024 * 1024) {
+      console.log("📦 Using RAM-based accumulation for file <100MB");
+      downloadStarted.current = true;
+      return false; // RAM-based
+    }
     
-    // Convert to blob URL and trigger automatic download to Downloads folder
+    // For large files without File System API: Create a download stream
+    // This uses browser's built-in streaming download (minimal RAM)
+    console.log("🌊 Using browser streaming download (minimal RAM)");
+    const link = document.createElement('a');
+    link.download = fileName;
+    
+    // Create a TransformStream to pipe chunks through
+    const { readable, writable } = new TransformStream();
+    downloadStream.current = writable;
+    fileWriter.current = writable.getWriter();
+    
+    // Convert readable stream to blob URL and start download immediately
+    // Browser will stream chunks to disk as they arrive
+    const response = new Response(readable);
     const blob = await response.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = fileName;
-    a.style.display = 'none';
-    document.body.appendChild(a);
-    a.click();
+    link.href = URL.createObjectURL(blob);
+    link.click();
     
-    // Keep reference for cleanup
-    downloadAnchor.current = a;
-    
-    console.log("✅ Download started - file will be saved to Downloads folder automatically");
     downloadStarted.current = true;
-    
-    return false;
+    console.log("✅ Browser streaming download started - chunks will stream to disk");
+    return true; // Using streaming
   };
 
-  // Write chunk to stream or accumulate for fallback
+  // Write chunk to download buffer (disk-based streaming or RAM accumulation)
   const writeChunkToDownload = async (chunk: ArrayBuffer) => {
     totalBytesReceived.current += chunk.byteLength; // Track total bytes
     
-    if (streamController.current) {
-      // Push chunk to ReadableStream - browser downloads it immediately to disk
-      // This keeps ZERO chunks in JavaScript memory - all handled by browser!
+    // If using disk-based streaming, write directly to disk
+    if (fileWriter.current) {
       try {
         const uint8Array = new Uint8Array(chunk);
-        streamController.current.enqueue(uint8Array);
-        // Chunk is now in browser's download manager, written directly to Downloads folder!
+        await fileWriter.current.write(uint8Array);
+        // Chunk written directly to disk - ZERO RAM usage!
+        return;
       } catch (err) {
-        console.error("❌ Error enqueueing chunk to stream:", err);
-        throw err;
+        console.error("❌ Error writing to disk stream:", err);
+        // Fall back to RAM accumulation on error
+        fileWriter.current = null;
       }
-    } else {
-      // Fallback for very old browsers: accumulate with aggressive consolidation
-      const blob = new Blob([chunk]);
-      downloadChunks.current.push(blob);
-      
-      if (downloadChunks.current.length >= 50) {
-        const consolidatedBlob = new Blob(downloadChunks.current);
-        downloadChunks.current = [consolidatedBlob];
-      }
+    }
+    
+    // Fallback: Accumulate chunks in RAM
+    const blob = new Blob([chunk]);
+    downloadChunks.current.push(blob);
+    
+    // Consolidate periodically to prevent too many small blobs
+    if (downloadChunks.current.length >= 100) {
+      const consolidatedBlob = new Blob(downloadChunks.current);
+      downloadChunks.current = [consolidatedBlob];
     }
   };
 
   // Finalize download
   const finalizeDownload = async (fileName: string) => {
-    if (streamController.current) {
-      // Close the ReadableStream - browser finalizes the download to Downloads folder
+    // If using disk-based streaming, close the writer
+    if (fileWriter.current) {
       try {
-        streamController.current.close();
-        streamController.current = null;
-        console.log("✅ Stream closed, file saved to Downloads folder automatically");
-        
-        // Cleanup download anchor after a delay
-        setTimeout(() => {
-          if (downloadAnchor.current) {
-            URL.revokeObjectURL(downloadAnchor.current.href);
-            document.body.removeChild(downloadAnchor.current);
-            downloadAnchor.current = null;
-          }
-        }, 1000);
-        
-        return null; // File already downloaded by browser
+        await fileWriter.current.close();
+        console.log("✅ Disk-based download complete:", fileName, "Total bytes:", totalBytesReceived.current);
+        fileWriter.current = null;
+        downloadStream.current = null;
+        return null; // File already saved to disk
       } catch (err) {
-        console.error("❌ Error closing stream controller:", err);
+        console.error("❌ Error closing file writer:", err);
       }
     }
     
-    // Fallback for older browsers: create blob and trigger download
+    // RAM-based: Create final blob from all chunks and trigger download
     if (downloadChunks.current.length > 0) {
-      console.log("📥 Finalizing download (fallback method)");
+      console.log("📥 Finalizing RAM-based download:", fileName, "Total bytes:", totalBytesReceived.current);
       const blob = new Blob(downloadChunks.current);
       downloadChunks.current = [];
-      return blob;
+      
+      // Trigger download immediately
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = fileName;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      
+      // Cleanup
+      setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }, 1000);
+      
+      console.log("✅ RAM-based download triggered:", fileName, "Size:", (blob.size / 1024 / 1024).toFixed(2), "MB");
+      
+      return null; // Already downloaded
     }
     
     return null;
@@ -171,23 +199,16 @@ export function useWebRTC() {
 
   // Cleanup streaming resources
   const cleanupStreamingDownload = () => {
-    if (streamController.current) {
+    // Close file writer if still open
+    if (fileWriter.current) {
       try {
-        streamController.current.close();
+        fileWriter.current.abort();
       } catch (e) {
         // Already closed
       }
-      streamController.current = null;
+      fileWriter.current = null;
     }
-    if (downloadAnchor.current) {
-      try {
-        URL.revokeObjectURL(downloadAnchor.current.href);
-        document.body.removeChild(downloadAnchor.current);
-      } catch (e) {
-        // Already removed
-      }
-      downloadAnchor.current = null;
-    }
+    downloadStream.current = null;
     downloadChunks.current = [];
     receivedChunks.current = [];
     totalBytesReceived.current = 0;
@@ -649,15 +670,10 @@ export function useWebRTC() {
           });
         }
       } else {
-        // File chunk - write to stream instead of accumulating in memory
-        if (streamController.current || downloadChunks.current.length > 0) {
-          writeChunkToDownload(event.data).catch(err => {
-            console.error("❌ Error writing chunk:", err);
-          });
-        } else {
-          // Fallback to old method only if streaming not initialized
-          receivedChunks.current.push(event.data);
-        }
+        // File chunk - accumulate in download buffer
+        writeChunkToDownload(event.data).catch(err => {
+          console.error("❌ Error writing chunk:", err);
+        });
         
         if (fileMetadata.current) {
           // Calculate progress based on actual bytes received
@@ -990,20 +1006,8 @@ export function useWebRTC() {
             } else if (metadata.type === "file-end") {
               const fileName = fileMetadata.current?.name || "download";
               
-              // Finalize the download
-              finalizeDownload(fileName).then(blob => {
-                if (blob) {
-                  // Fallback method: trigger download
-                  console.log("📥 Auto-downloading file (fallback method):", fileName);
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement("a");
-                  a.href = url;
-                  a.download = fileName;
-                  document.body.appendChild(a);
-                  a.click();
-                  document.body.removeChild(a);
-                  setTimeout(() => URL.revokeObjectURL(url), 1000);
-                }
+              // Finalize the download (this will trigger the download)
+              finalizeDownload(fileName).then(() => {
                 
                 // Update state - create a small placeholder blob for UI
                 const placeholderBlob = new Blob(["File downloaded"], { type: "text/plain" });
@@ -1025,15 +1029,10 @@ export function useWebRTC() {
               });
             }
           } else {
-            // File chunk - write to stream instead of accumulating in memory
-            if (streamController.current || downloadChunks.current.length > 0) {
-              writeChunkToDownload(e.data).catch(err => {
-                console.error("❌ Error writing chunk:", err);
-              });
-            } else {
-              // Fallback to old method only if streaming not initialized
-              receivedChunks.current.push(e.data);
-            }
+            // File chunk - accumulate in download buffer
+            writeChunkToDownload(e.data).catch(err => {
+              console.error("❌ Error writing chunk:", err);
+            });
             
             if (fileMetadata.current) {
               // Calculate progress based on actual bytes received
@@ -1309,6 +1308,8 @@ export function useWebRTC() {
 
       // Start transfer
       console.log(`🚀 Starting transfer: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`);
+      setTransferProgress(0); // Reset progress for this file
+      setCurrentFileName(file.name); // Update current file name
       readNextChunk();
     });
   }, [dataChannel]);

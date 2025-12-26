@@ -14,6 +14,7 @@ export function QRScanner({ onScan, onClose }: QRScannerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [error, setError] = useState<string>("");
   const [isScanning, setIsScanning] = useState(true);
+  const [permissionState, setPermissionState] = useState<"prompt" | "granted" | "denied">("prompt");
   const readerRef = useRef<BrowserMultiFormatReader | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const hasScanned = useRef(false);
@@ -22,25 +23,80 @@ export function QRScanner({ onScan, onClose }: QRScannerProps) {
     const codeReader = new BrowserMultiFormatReader();
     readerRef.current = codeReader;
 
+    const checkCameraPermission = async () => {
+      try {
+        // Check if Permissions API is available
+        if (navigator.permissions && navigator.permissions.query) {
+          const result = await navigator.permissions.query({ name: 'camera' as PermissionName });
+          setPermissionState(result.state as "prompt" | "granted" | "denied");
+          
+          // Listen for permission changes
+          result.addEventListener('change', () => {
+            setPermissionState(result.state as "prompt" | "granted" | "denied");
+          });
+          
+          if (result.state === 'denied') {
+            setError("Camera access denied. Please enable camera permissions in your browser settings and reload the page.");
+            return false;
+          }
+        }
+      } catch (err) {
+        console.log("Permissions API not available, proceeding with getUserMedia");
+      }
+      return true;
+    };
+
     const startScanning = async () => {
       try {
-        // First, explicitly request camera permissions using getUserMedia
-        // This ensures the permission prompt appears on all devices
+        // Check permission first
+        const canProceed = await checkCameraPermission();
+        if (!canProceed) return;
+
+        // Request camera access with comprehensive constraints for mobile compatibility
         let permissionStream: MediaStream | null = null;
         try {
-          permissionStream = await navigator.mediaDevices.getUserMedia({ 
-            video: { facingMode: { ideal: "environment" } } 
-          });
+          // Enhanced constraints for better mobile support
+          const constraints = {
+            video: {
+              facingMode: { ideal: "environment" }, // Prefer back camera
+              width: { ideal: 1280 }, // HD resolution
+              height: { ideal: 720 },
+              aspectRatio: { ideal: 1.777778 }, // 16:9
+            }
+          };
+          
+          permissionStream = await navigator.mediaDevices.getUserMedia(constraints);
+          setPermissionState("granted");
+          console.log("✅ Camera permission granted");
         } catch (permError: any) {
           console.error("Permission error:", permError);
+          
+          // Provide specific error messages based on error type
           if (permError.name === "NotAllowedError" || permError.name === "PermissionDeniedError") {
-            setError("Camera permission denied. Please grant camera access in your browser settings.");
-          } else if (permError.name === "NotFoundError") {
-            setError("No camera found on this device");
+            setError("📷 Camera permission denied. Please tap 'Allow' when prompted, or enable camera in your browser settings.");
+            setPermissionState("denied");
+          } else if (permError.name === "NotFoundError" || permError.name === "DevicesNotFoundError") {
+            setError("📷 No camera found on this device. Please check your device settings.");
+          } else if (permError.name === "NotReadableError" || permError.name === "TrackStartError") {
+            setError("📷 Camera is already in use by another app. Please close other apps using the camera and try again.");
+          } else if (permError.name === "OverconstrainedError") {
+            // Try again with simpler constraints
+            try {
+              permissionStream = await navigator.mediaDevices.getUserMedia({ 
+                video: { facingMode: "environment" } 
+              });
+              setPermissionState("granted");
+            } catch (retryError) {
+              setError("📷 Failed to access camera. Please grant camera permissions and try again.");
+              return;
+            }
+          } else if (permError.name === "SecurityError") {
+            setError("📷 Camera access blocked due to security policy. Please ensure you're using HTTPS or localhost.");
           } else {
-            setError("Failed to access camera. Please grant camera permissions.");
+            setError("📷 Failed to access camera. Please grant camera permissions in your browser settings.");
           }
-          return;
+          
+          if (!permissionStream) return;
         }
 
         // Stop the permission stream as we'll use ZXing's stream
@@ -154,8 +210,29 @@ export function QRScanner({ onScan, onClose }: QRScannerProps) {
 
         <div className="p-4 space-y-4">
           {error ? (
-            <div className="bg-destructive/10 text-destructive p-4 rounded-lg text-center">
+            <div className="bg-destructive/10 text-destructive p-4 rounded-lg text-center space-y-3">
               <p className="text-sm">{error}</p>
+              {permissionState === "denied" && (
+                <div className="text-xs text-muted-foreground space-y-2">
+                  <p className="font-semibold">How to enable camera:</p>
+                  <ul className="text-left space-y-1 pl-4">
+                    <li>• Chrome/Edge: Click the 🔒 icon in address bar → Site settings → Camera → Allow</li>
+                    <li>• Safari iOS: Settings → Safari → Camera → Allow</li>
+                    <li>• Firefox: Click the 🔒 icon → Clear permissions and retry</li>
+                  </ul>
+                </div>
+              )}
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => {
+                  setError("");
+                  window.location.reload();
+                }}
+                className="mt-2"
+              >
+                Reload Page
+              </Button>
             </div>
           ) : (
             <>

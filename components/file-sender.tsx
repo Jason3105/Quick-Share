@@ -85,12 +85,13 @@ export function FileSender({ onBack }: FileSenderProps) {
       // Send files sequentially
       for (let i = 0; i < files.length; i++) {
         console.log(`📤 Sending file ${i + 1}/${files.length}:`, files[i].name);
+        // File metadata and progress will be set in sendFile
         await sendFile(files[i]);
         setFilesSentMap(prev => ({ ...prev, [i]: true }));
         
-        // Small delay between files to ensure clean state
+        // Small delay between files to ensure clean state and reset
         if (i < files.length - 1) {
-          await new Promise(resolve => setTimeout(resolve, 500));
+          await new Promise(resolve => setTimeout(resolve, 1000));
         }
       }
       
