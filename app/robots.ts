@@ -10,7 +10,6 @@ export default function robots(): MetadataRoute.Robots {
         allow: ['/', '/send', '/receive'],
         disallow: [
           '/api/*',
-          '/*?*',  // Block all URLs with query parameters
         ],
       },
       {
@@ -18,20 +17,18 @@ export default function robots(): MetadataRoute.Robots {
         allow: ['/', '/send', '/receive'],
         disallow: [
           '/api/*',
-          '/*?*',  // Block all URLs with query parameters
         ],
       },
       {
         userAgent: 'Googlebot-Image',
         allow: ['/'],
-        disallow: ['/*?*'],
+        disallow: ['/api/*'],
       },
       {
         userAgent: 'Bingbot',
         allow: ['/', '/send', '/receive'],
         disallow: [
           '/api/*',
-          '/*?*',  // Block all URLs with query parameters
         ],
       },
       // Social media crawlers for rich previews - allow query params for dynamic previews
