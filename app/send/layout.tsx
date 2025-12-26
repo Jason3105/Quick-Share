@@ -1,25 +1,42 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: 'Send Files - Free P2P File Transfer | Quick Share',
-  description: 'Send large files instantly for free. Share files of any size with secure peer-to-peer transfer. Get QR code, link, or room code to share. No registration, unlimited file size, end-to-end encrypted P2P transfer.',
+  title: 'Send Files - Quick Share | Free P2P File Transfer',
+  description: 'Send large files instantly and securely with Quick Share. Free peer-to-peer file sharing with no size limits. Share files directly from your browser using WebRTC. No registration required, end-to-end encrypted.',
   keywords: [
-    'send files',
     'send large files',
-    'file sender',
-    'upload files',
-    'share files',
-    'p2p send',
-    'free file upload',
-    'send files free',
-    'large file sender',
-    'instant file share',
-    'qr code sharing',
+    'send big files free',
+    'p2p file sender',
+    'share files online',
+    'send files securely',
+    'transfer large files',
+    'send files no limit',
+    'free file sender',
+    'browser file transfer',
+    'webrtc file sender',
+    'qr code file sharing',
+    'instant file transfer',
+    'upload large files',
+    'share files free',
   ],
   openGraph: {
-    title: 'Send Files Free - Quick Share P2P Transfer',
-    description: 'Share files instantly with secure P2P transfer. No size limits, no registration required. Upload and share via QR code, link, or room code.',
+    title: 'Send Files - Quick Share | Free P2P File Transfer',
+    description: 'Send large files instantly and securely. Free peer-to-peer file sharing with no size limits. Share files directly from your browser.',
     url: 'https://quicksharep2p.onrender.com/send',
+    type: 'website',
+    siteName: 'Quick Share',
+    images: [{
+      url: 'https://quicksharep2p.onrender.com/og-image.png',
+      width: 1200,
+      height: 630,
+      alt: 'Quick Share - Send Files Securely',
+    }],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Send Files - Quick Share',
+    description: 'Send large files instantly and securely. Free peer-to-peer file sharing with no size limits.',
+    images: ['https://quicksharep2p.onrender.com/og-image.png'],
   },
   alternates: {
     canonical: 'https://quicksharep2p.onrender.com/send',
@@ -27,6 +44,13 @@ export const metadata: Metadata = {
   robots: {
     index: true,
     follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      'max-video-preview': -1,
+      'max-image-preview': 'large',
+      'max-snippet': -1,
+    },
   },
 };
 

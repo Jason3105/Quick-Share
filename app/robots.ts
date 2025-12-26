@@ -1,34 +1,46 @@
 import { MetadataRoute } from 'next'
  
 export default function robots(): MetadataRoute.Robots {
+  const baseUrl = 'https://quicksharep2p.onrender.com'
+  
   return {
     rules: [
       {
         userAgent: '*',
-        allow: '/',
-        disallow: ['/?room=*', '/*?room=*', '/?join=*', '/*?join=*'],
-        crawlDelay: 0,
+        allow: ['/', '/send', '/receive'],
+        disallow: [
+          '/api/*',
+          '/*?*',  // Block all URLs with query parameters
+        ],
       },
       {
         userAgent: 'Googlebot',
-        allow: '/',
-        disallow: ['/?room=*', '/*?room=*'],
+        allow: ['/', '/send', '/receive'],
+        disallow: [
+          '/api/*',
+          '/*?*',  // Block all URLs with query parameters
+        ],
       },
       {
         userAgent: 'Googlebot-Image',
-        allow: '/',
+        allow: ['/'],
+        disallow: ['/*?*'],
       },
       {
         userAgent: 'Bingbot',
-        allow: '/',
-        disallow: ['/?room=*', '/*?room=*'],
+        allow: ['/', '/send', '/receive'],
+        disallow: [
+          '/api/*',
+          '/*?*',  // Block all URLs with query parameters
+        ],
       },
-      // Social media crawlers for rich previews
+      // Social media crawlers for rich previews - allow query params for dynamic previews
       {
         userAgent: ['facebookexternalhit', 'Twitterbot', 'LinkedInBot', 'WhatsApp'],
-        allow: '/',
+        allow: ['/'],
       },
     ],
-    sitemap: 'https://quicksharep2p.onrender.com/sitemap.xml',
+    sitemap: `${baseUrl}/sitemap.xml`,
+    host: baseUrl,
   }
 }
