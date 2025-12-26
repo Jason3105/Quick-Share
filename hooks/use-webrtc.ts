@@ -1272,7 +1272,7 @@ export function useWebRTC() {
     wasTransferring.current = true;
     
     // Get all connected data channels
-    const channels = Array.from(dataChannelsMap.current.values());
+    let channels = Array.from(dataChannelsMap.current.values());
     
     if (channels.length === 0) {
       // Fallback to single channel for receiver
@@ -1284,8 +1284,21 @@ export function useWebRTC() {
     
     console.log(`📤 Broadcasting file to ${channels.length} receiver(s)`);
     
-    // Wait for all channels to be ready
-    await Promise.all(channels.map(ch => waitForDataChannel(ch, 15000)));
+    // Wait for channels to be ready, but don't fail if some timeout
+    // Filter to only healthy channels
+    const channelReadyResults = await Promise.allSettled(
+      channels.map(ch => waitForDataChannel(ch, 5000))
+    );
+    
+    channels = channelReadyResults
+      .map((result, idx) => result.status === 'fulfilled' ? channels[idx] : null)
+      .filter((ch): ch is RTCDataChannel => ch !== null && ch.readyState === 'open');
+    
+    if (channels.length === 0) {
+      throw new Error("No healthy data channels available");
+    }
+    
+    console.log(`✅ ${channels.length} healthy channel(s) ready for transfer`);
     
     // Request wake lock to prevent screen sleep during send
     await requestWakeLock();
@@ -1323,8 +1336,16 @@ export function useWebRTC() {
         const now = Date.now();
         const elapsed = (now - lastProgressUpdate) / 1000; // seconds
         
-        // Get max buffer amount across all channels
-        const maxBufferAmount = Math.max(...channels.map(ch => ch.bufferedAmount));
+        // Filter to only healthy/open channels
+        channels = channels.filter(ch => ch.readyState === 'open');
+        
+        if (channels.length === 0) {
+          console.warn("⚠️ All channels closed during transfer");
+          return;
+        }
+        
+        // Get max buffer amount across all healthy channels
+        const maxBufferAmount = Math.max(...channels.map(ch => ch.bufferedAmount), 0);
         
         if (elapsed > 0.1 && bytesTransferred > 0) {
           const instantThroughput = bytesTransferred / elapsed; // bytes per second
@@ -1366,12 +1387,36 @@ export function useWebRTC() {
 
       const sendChunk = (chunk: ArrayBuffer) => {
         try {
-          // Send to all connected receivers
+          // Filter to only open channels before sending
+          channels = channels.filter(ch => ch.readyState === 'open');
+          
+          if (channels.length === 0) {
+            console.warn("⚠️ All receivers disconnected");
+            wasTransferring.current = false;
+            activeTransferFile.current = null;
+            releaseWakeLock();
+            resolve(); // Complete gracefully even if all receivers left
+            return;
+          }
+          
+          // Send to all healthy receivers
+          let successCount = 0;
           channels.forEach(channel => {
-            if (channel.readyState === "open") {
-              channel.send(chunk);
+            try {
+              if (channel.readyState === "open") {
+                channel.send(chunk);
+                successCount++;
+              }
+            } catch (err) {
+              console.warn("⚠️ Failed to send to one receiver:", err);
+              // Continue sending to other receivers
             }
           });
+          
+          if (successCount === 0) {
+            console.warn("⚠️ Failed to send chunk to any receiver");
+            // Don't fail entirely - try next chunk
+          }
           
           offset += chunk.byteLength;
           bytesTransferred += chunk.byteLength;
@@ -1382,13 +1427,13 @@ export function useWebRTC() {
 
           // Adaptive chunk size updates - more frequent for better responsiveness
           if (totalBytesTransferred % (currentChunkSize * 5) === 0 || 
-              Math.max(...channels.map(ch => ch.bufferedAmount)) > OPTIMAL_BUFFER_SIZE) {
+              Math.max(...channels.map(ch => ch.bufferedAmount), 0) > OPTIMAL_BUFFER_SIZE) {
             updateChunkSize();
           }
 
           if (offset < file.size) {
             // Continue immediately if buffer is low, otherwise schedule
-            const maxBuffer = Math.max(...channels.map(ch => ch.bufferedAmount));
+            const maxBuffer = Math.max(...channels.filter(ch => ch.readyState === 'open').map(ch => ch.bufferedAmount), 0);
             if (maxBuffer < BUFFER_LOW_THRESHOLD) {
               readNextChunk();
             } else {
@@ -1400,12 +1445,17 @@ export function useWebRTC() {
             const elapsed = (Date.now() - startTime) / 1000;
             const avgSpeed = (file.size / elapsed / 1024 / 1024).toFixed(2);
             const peakChunkSize = Math.floor(highWaterMark / 1024);
-            console.log(`✅ Transfer complete to ${channels.length} receiver(s): ${avgSpeed} MB/s average, peak buffer: ${peakChunkSize}KB`);
+            const activeChannels = channels.filter(ch => ch.readyState === 'open');
+            console.log(`✅ Transfer complete to ${activeChannels.length} receiver(s): ${avgSpeed} MB/s average, peak buffer: ${peakChunkSize}KB`);
             
             const endSignal = JSON.stringify({ type: "file-end" });
-            channels.forEach(channel => {
-              if (channel.readyState === "open") {
-                channel.send(endSignal);
+            activeChannels.forEach(channel => {
+              try {
+                if (channel.readyState === "open") {
+                  channel.send(endSignal);
+                }
+              } catch (err) {
+                console.warn("⚠️ Failed to send end signal to one receiver:", err);
               }
             });
             
@@ -1430,8 +1480,20 @@ export function useWebRTC() {
       };
 
       const readNextChunk = () => {
+        // Filter to only open channels
+        channels = channels.filter(ch => ch.readyState === 'open');
+        
+        if (channels.length === 0) {
+          console.warn("⚠️ All receivers disconnected during transfer");
+          wasTransferring.current = false;
+          activeTransferFile.current = null;
+          releaseWakeLock();
+          resolve(); // Complete gracefully
+          return;
+        }
+        
         // Advanced flow control with intelligent buffering
-        const maxBufferAmount = Math.max(...channels.map(ch => ch.bufferedAmount));
+        const maxBufferAmount = Math.max(...channels.map(ch => ch.bufferedAmount), 0);
         const bufferRatio = maxBufferAmount / MAX_BUFFER_SIZE;
         
         // Dynamic wait times based on buffer state
@@ -1481,24 +1543,26 @@ export function useWebRTC() {
         reader.onload = (e) => {
           if (e.target?.result) {
             const chunk = e.target.result as ArrayBuffer;
-            // Check if all channels are still open
-            const allOpen = channels.every(ch => ch.readyState === "open");
-            if (allOpen) {
+            // Filter to only open channels
+            channels = channels.filter(ch => ch.readyState === "open");
+            
+            if (channels.length > 0) {
               sendChunk(chunk);
             } else {
-              console.warn("⚠️ Some channels closed during transfer");
-              // Continue with open channels only
-              const openChannels = channels.filter(ch => ch.readyState === "open");
-              if (openChannels.length > 0) {
-                sendChunk(chunk);
-              } else {
-                reject(new Error("All data channels closed during transfer"));
-              }
+              console.warn("⚠️ All channels closed during file read");
+              wasTransferring.current = false;
+              activeTransferFile.current = null;
+              releaseWakeLock();
+              resolve(); // Complete gracefully even if all receivers left
             }
           }
         };
         
         reader.onerror = () => {
+          console.error("❌ File read error");
+          wasTransferring.current = false;
+          activeTransferFile.current = null;
+          releaseWakeLock();
           reject(new Error("File read error"));
         };
         
