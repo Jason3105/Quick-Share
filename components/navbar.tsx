@@ -14,15 +14,15 @@ export function Navbar() {
             <Logo className="h-8 w-8 sm:h-10 sm:w-10 text-foreground" />
             <div>
               <h1 className="text-lg sm:text-2xl font-bold text-foreground">
-                Quick Share
+                Quick Share P2P
               </h1>
               <p className="text-xs text-muted-foreground hidden sm:block">P2P File Transfer</p>
             </div>
           </Link>
           <div className="flex items-center gap-2 sm:gap-4">
-            <a 
-              href="https://github.com/Jason3105/Quick-Share" 
-              target="_blank" 
+            <a
+              href="https://github.com/Jason3105/Quick-Share"
+              target="_blank"
               rel="noopener noreferrer"
               className="text-muted-foreground hover:text-foreground transition-colors"
               aria-label="View source on GitHub"
