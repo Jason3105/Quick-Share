@@ -18,6 +18,7 @@ export function FileReceiver({ onBack, initialRoomCode = "" }: FileReceiverProps
   const [code, setCode] = useState(initialRoomCode);
   const [showScanner, setShowScanner] = useState(false);
   const [hasJoinedRoom, setHasJoinedRoom] = useState(false);
+  const [useRelayMode, setUseRelayMode] = useState(false);
   const hasAttemptedJoin = useRef(false);
   const isProcessingQRScan = useRef(false);
   
@@ -34,7 +35,8 @@ export function FileReceiver({ onBack, initialRoomCode = "" }: FileReceiverProps
     requestFileDownload,
     downloadingFileIndex,
     socket,
-    resetConnection
+    resetConnection,
+    enableRelayMode
   } = useWebRTC();
 
   // Auto-join if initial room code is provided - wait for socket to connect
@@ -48,6 +50,10 @@ export function FileReceiver({ onBack, initialRoomCode = "" }: FileReceiverProps
           hasAttemptedJoin.current = true;
           setCode(initialRoomCode);
           setHasJoinedRoom(true);
+          // Enable relay mode by default when joining via URL (common for shared links)
+          if (useRelayMode) {
+            enableRelayMode();
+          }
           joinRoom(initialRoomCode.trim());
         } else {
           console.log("Socket not connected yet, waiting...");
@@ -57,6 +63,9 @@ export function FileReceiver({ onBack, initialRoomCode = "" }: FileReceiverProps
             hasAttemptedJoin.current = true;
             setCode(initialRoomCode);
             setHasJoinedRoom(true);
+            if (useRelayMode) {
+              enableRelayMode();
+            }
             joinRoom(initialRoomCode.trim());
           });
         }
@@ -65,11 +74,15 @@ export function FileReceiver({ onBack, initialRoomCode = "" }: FileReceiverProps
       // Small delay to ensure socket initialization is complete
       setTimeout(attemptJoin, 100);
     }
-  }, [initialRoomCode, joinRoom, socket]);
+  }, [initialRoomCode, joinRoom, socket, enableRelayMode, useRelayMode]);
 
   const handleJoin = () => {
     if (code.trim() && !hasJoinedRoom) {
       console.log("Manually joining room:", code.trim());
+      if (useRelayMode) {
+        console.log("🔧 Enabling relay mode for restrictive network");
+        enableRelayMode();
+      }
       joinRoom(code.trim());
       setHasJoinedRoom(true);
     }
@@ -92,12 +105,20 @@ export function FileReceiver({ onBack, initialRoomCode = "" }: FileReceiverProps
     const attemptJoinAfterScan = () => {
       if (socket?.connected) {
         console.log("Socket connected - joining room after QR scan:", scannedCode);
+        if (useRelayMode) {
+          console.log("🔧 Enabling relay mode for restrictive network");
+          enableRelayMode();
+        }
         joinRoom(scannedCode);
       } else {
         console.log("Socket not connected yet, waiting...");
         // Wait for socket to connect
         socket?.once("connect", () => {
           console.log("Socket connected - now joining room:", scannedCode);
+          if (useRelayMode) {
+            console.log("🔧 Enabling relay mode for restrictive network");
+            enableRelayMode();
+          }
           joinRoom(scannedCode);
         });
       }
@@ -142,14 +163,13 @@ export function FileReceiver({ onBack, initialRoomCode = "" }: FileReceiverProps
     hasAttemptedJoin.current = false;
     isProcessingQRScan.current = false;
     
-    // Keep the code so user doesn't have to re-enter
-    if (code.trim()) {
-      // Small delay to ensure state is clean
-      setTimeout(() => {
-        setHasJoinedRoom(true);
-        joinRoom(code.trim());
-      }, 300);
+    // Suggest enabling relay mode if not already enabled
+    if (!useRelayMode) {
+      console.log("💡 Hint: Consider enabling 'On a restrictive network?' option if retry fails again");
     }
+    
+    // Keep the code so user doesn't have to re-enter
+    // Don't auto-retry - let user choose to enable relay mode if needed
   };
 
   const progress = transferProgress;
@@ -209,6 +229,25 @@ export function FileReceiver({ onBack, initialRoomCode = "" }: FileReceiverProps
                   {hasJoinedRoom ? "Joined" : "Join"}
                 </Button>
               </div>
+              
+              {/* Relay mode checkbox for restrictive networks */}
+              {!hasJoinedRoom && (
+                <div className="flex items-start gap-3 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
+                  <input
+                    type="checkbox"
+                    id="relayMode"
+                    checked={useRelayMode}
+                    onChange={(e) => setUseRelayMode(e.target.checked)}
+                    className="mt-1 h-4 w-4 rounded border-gray-300 cursor-pointer"
+                  />
+                  <label htmlFor="relayMode" className="text-xs sm:text-sm cursor-pointer flex-1">
+                    <span className="font-semibold text-amber-900 dark:text-amber-100">On a college/corporate network?</span>
+                    <p className="text-amber-700 dark:text-amber-300 mt-0.5">
+                      Enable this if you're behind a restrictive firewall or proxy (uses relay servers for better compatibility)
+                    </p>
+                  </label>
+                </div>
+              )}
             </div>
 
             <div className="bg-slate-50 dark:bg-slate-900 p-4 rounded-lg border text-center">

@@ -17,7 +17,7 @@ const CHUNK_RAMP_DOWN_FACTOR = 0.8; // Quick chunk size decrease on congestion
 // Robust ICE server configuration for reliable P2P connectivity
 // Includes multiple STUN servers and free TURN servers for NAT traversal
 // Critical for mobile hotspot and restrictive network scenarios
-const getIceServers = (forceRelay: boolean = false): RTCConfiguration => {
+const getIceServers = (forceRelay: boolean = false, aggressiveMode: boolean = false): RTCConfiguration => {
   const config: RTCConfiguration = {
     iceServers: [
       // Multiple Google STUN servers for reliable NAT discovery
@@ -29,52 +29,55 @@ const getIceServers = (forceRelay: boolean = false): RTCConfiguration => {
       // Additional public STUN servers for fallback
       { urls: "stun:stun.cloudflare.com:3478" },
       { urls: "stun:stun.stunprotocol.org:3478" },
-      // Metered.ca free TURN servers (reliable, multiple protocols)
+      // Twilio STUN (reliable for restrictive networks)
+      { urls: "stun:global.stun.twilio.com:3478" },
+      
+      // Primary TURN servers - Metered.ca (updated credentials)
       {
-        urls: "turn:a.relay.metered.ca:80",
-        username: "e8dd65b92c629e4e5315c780",
-        credential: "xfnwmYLOfLaFT/xR",
-      },
-      {
-        urls: "turn:a.relay.metered.ca:80?transport=tcp",
-        username: "e8dd65b92c629e4e5315c780",
-        credential: "xfnwmYLOfLaFT/xR",
-      },
-      {
-        urls: "turn:a.relay.metered.ca:443",
-        username: "e8dd65b92c629e4e5315c780",
-        credential: "xfnwmYLOfLaFT/xR",
-      },
-      {
-        urls: "turn:a.relay.metered.ca:443?transport=tcp",
-        username: "e8dd65b92c629e4e5315c780",
-        credential: "xfnwmYLOfLaFT/xR",
+        urls: [
+          "turn:a.relay.metered.ca:80",
+          "turn:a.relay.metered.ca:80?transport=tcp",
+          "turn:a.relay.metered.ca:443",
+          "turn:a.relay.metered.ca:443?transport=tcp",
+        ],
+        username: "987e39355bf52b38527c458c",
+        credential: "tE2DajzSUim1ZwHq",
       },
       {
         urls: "turns:a.relay.metered.ca:443?transport=tcp",
-        username: "e8dd65b92c629e4e5315c780",
-        credential: "xfnwmYLOfLaFT/xR",
+        username: "987e39355bf52b38527c458c",
+        credential: "tE2DajzSUim1ZwHq",
       },
-      // OpenRelay backup TURN servers
+      
+      // Backup TURN servers - OpenRelay
       {
-        urls: "turn:openrelay.metered.ca:80",
+        urls: [
+          "turn:openrelay.metered.ca:80",
+          "turn:openrelay.metered.ca:443",
+          "turn:openrelay.metered.ca:443?transport=tcp",
+        ],
         username: "openrelayproject",
         credential: "openrelayproject",
       },
+      
+      // Additional Numb TURN servers for extra redundancy
       {
-        urls: "turn:openrelay.metered.ca:443",
-        username: "openrelayproject",
-        credential: "openrelayproject",
-      },
-      {
-        urls: "turn:openrelay.metered.ca:443?transport=tcp",
-        username: "openrelayproject",
-        credential: "openrelayproject",
+        urls: [
+          "turn:numb.viagenie.ca:3478",
+          "turn:numb.viagenie.ca:3478?transport=tcp",
+        ],
+        username: "webrtc@live.com",
+        credential: "muazkh",
       },
     ],
-    iceCandidatePoolSize: 10,
+    // Increase ICE candidate pool for better connectivity in restrictive networks
+    iceCandidatePoolSize: aggressiveMode ? 20 : 10,
     // Force relay-only mode for restrictive networks (mobile hotspot, symmetric NAT)
     iceTransportPolicy: forceRelay ? 'relay' : 'all',
+    // Enable bundle policy for better NAT traversal
+    bundlePolicy: 'max-bundle',
+    // Use all available candidates
+    rtcpMuxPolicy: 'require',
   };
   return config;
 };
@@ -144,6 +147,9 @@ export function useWebRTC() {
   // Force relay mode for restrictive networks (mobile hotspot, symmetric NAT)
   // Set to true on connection failure to retry with TURN relay only
   const forceRelayMode = useRef<boolean>(false);
+  const aggressiveMode = useRef<boolean>(false);
+  const connectionAttemptStartTime = useRef<number>(0);
+  const iceGatheringTimeout = useRef<NodeJS.Timeout | null>(null);
 
   // Initialize streaming download for large files
   const initializeStreamingDownload = async (fileName: string, fileSize: number) => {
@@ -466,6 +472,7 @@ export function useWebRTC() {
         makingOffer.current = true;
 
         // Wait for ICE gathering to complete for better connectivity
+        // Shorter timeout for faster initial connection, we can trickle ICE
         const waitForICEGathering = new Promise<void>((resolve) => {
           if (pc.iceGatheringState === 'complete') {
             resolve();
@@ -477,11 +484,13 @@ export function useWebRTC() {
               }
             };
             pc.addEventListener('icegatheringstatechange', checkGathering);
-            // Timeout after 3 seconds to not block too long
+            // Reduced timeout - ICE trickling will continue after
+            const timeoutMs = aggressiveMode.current ? 5000 : 2000;
             setTimeout(() => {
               pc.removeEventListener('icegatheringstatechange', checkGathering);
+              console.log("⏱️ ICE gathering timeout, proceeding with available candidates (gathering state:", pc.iceGatheringState, ")");
               resolve();
-            }, 3000);
+            }, timeoutMs);
           }
         });
 
@@ -652,6 +661,10 @@ export function useWebRTC() {
         clearTimeout(connectionTimeoutRef.current);
         connectionTimeoutRef.current = null;
       }
+      if (iceGatheringTimeout.current) {
+        clearTimeout(iceGatheringTimeout.current);
+        iceGatheringTimeout.current = null;
+      }
       // Clear stats monitoring
       if (statsIntervalRef.current) {
         clearInterval(statsIntervalRef.current);
@@ -668,16 +681,29 @@ export function useWebRTC() {
   const createPeerConnectionForReceiver = useCallback((receiverId: string): RTCPeerConnection => {
     const room = currentRoomId.current;
 
-    const pc = new RTCPeerConnection(getIceServers(forceRelayMode.current));
+    const pc = new RTCPeerConnection(getIceServers(forceRelayMode.current, aggressiveMode.current));
 
     pc.onicecandidate = (event) => {
       if (event.candidate) {
-        console.log("🧊 Sending ICE candidate to receiver:", receiverId);
+        console.log("🧊 ICE candidate for receiver", receiverId, "- Type:", event.candidate.type, "Protocol:", event.candidate.protocol);
         socketRef.current?.emit("ice-candidate", {
           roomId: room,
           candidate: event.candidate,
           targetId: receiverId,
         });
+      }
+    };
+
+    pc.onicecandidateerror = (event: any) => {
+      console.warn("⚠️ ICE candidate error for receiver", receiverId, ":", event.errorText || event.errorCode);
+    };
+
+    pc.oniceconnectionstatechange = () => {
+      console.log(`❄️ ICE state for receiver ${receiverId}:`, pc.iceConnectionState);
+      
+      if (pc.iceConnectionState === "failed") {
+        console.log(`🔄 ICE failed for receiver ${receiverId}, attempting restart`);
+        pc.restartIce();
       }
     };
 
@@ -693,6 +719,9 @@ export function useWebRTC() {
       if (pc.connectionState === "connected") {
         console.log(`✅ Connected to receiver: ${receiverId}`);
         setConnectionState(`Connected to ${peerConnectionsMap.current.size} receiver(s)`);
+        // Reset retry counters on success
+        reconnectAttempts.current = 0;
+        aggressiveMode.current = false;
       } else if (pc.connectionState === "failed" || pc.connectionState === "closed") {
         console.log(`❌ Connection to receiver ${receiverId}:`, pc.connectionState);
         // Clean up this specific connection
@@ -751,11 +780,11 @@ export function useWebRTC() {
       peerConnectionRef.current.close();
     }
 
-    const pc = new RTCPeerConnection(getIceServers(forceRelayMode.current));
+    const pc = new RTCPeerConnection(getIceServers(forceRelayMode.current, aggressiveMode.current));
 
     pc.onicecandidate = (event) => {
       if (event.candidate && socket) {
-        console.log("🧊 Sending ICE candidate");
+        console.log("🧊 ICE candidate - Type:", event.candidate.type, "Protocol:", event.candidate.protocol);
         socket.emit("ice-candidate", {
           roomId,
           candidate: event.candidate,
@@ -765,12 +794,32 @@ export function useWebRTC() {
       }
     };
 
+    pc.onicecandidateerror = (event: any) => {
+      console.warn("⚠️ ICE candidate error:", event.errorText || event.errorCode);
+    };
+
+    pc.oniceconnectionstatechange = () => {
+      console.log("❄️ ICE connection state:", pc.iceConnectionState);
+      if (pc.iceConnectionState === "failed" && reconnectAttempts.current < maxReconnectAttempts) {
+        reconnectAttempts.current++;
+        if (!forceRelayMode.current) {
+          console.log("🔄 Enabling relay mode after ICE failure");
+          forceRelayMode.current = true;
+        }
+        console.log(`🔄 Restarting ICE (attempt ${reconnectAttempts.current}/${maxReconnectAttempts})`);
+        pc.restartIce();
+      }
+    };
+
     pc.onconnectionstatechange = () => {
       console.log("🔗 RTCPeerConnection state changed:", pc.connectionState);
       setConnectionState(pc.connectionState);
       setIsConnected(pc.connectionState === "connected");
 
-      if (pc.connectionState === "failed" || pc.connectionState === "disconnected") {
+      if (pc.connectionState === "connected") {
+        reconnectAttempts.current = 0;
+        aggressiveMode.current = false;
+      } else if (pc.connectionState === "failed" || pc.connectionState === "disconnected") {
         console.error("❌ Connection failed or disconnected");
       }
     };
@@ -998,50 +1047,125 @@ export function useWebRTC() {
     if (socket && socket.connected) {
       socket.emit("join-room", { roomId: code });
 
+      // Detect if we should use aggressive mode based on connection history
+      if (reconnectAttempts.current > 0) {
+        aggressiveMode.current = true;
+        console.log("🚀 Enabling aggressive connection mode for restrictive network");
+      }
+
+      // On second attempt, force relay mode immediately for restrictive networks
+      if (reconnectAttempts.current >= 1) {
+        forceRelayMode.current = true;
+        console.log("🔄 Forcing TURN relay mode for restrictive network");
+        setConnectionState("Using relay server for restricted network...");
+      }
+
       // Create peer connection as receiver - use forceRelayMode for restrictive networks
-      const pc = new RTCPeerConnection(getIceServers(forceRelayMode.current));
+      const pc = new RTCPeerConnection(getIceServers(forceRelayMode.current, aggressiveMode.current));
+      connectionAttemptStartTime.current = Date.now();
 
       pc.onicecandidate = (event) => {
         if (event.candidate) {
-          console.log("🧊 Sending ICE candidate");
+          const candidateType = event.candidate.type; // host, srflx (STUN), relay (TURN)
+          const protocol = event.candidate.protocol; // udp, tcp
+          console.log(`🧊 ICE candidate - Type: ${candidateType}, Protocol: ${protocol}`);
+          
+          // Prioritize relay candidates for restrictive networks
+          if (forceRelayMode.current && candidateType !== 'relay') {
+            console.log("⚠️ Skipping non-relay candidate in relay-only mode");
+            return;
+          }
+          
           socketRef.current?.emit("ice-candidate", {
             roomId: code,
             candidate: event.candidate,
           });
         } else {
-          console.log("✅ ICE gathering complete");
+          const gatheringTime = Date.now() - connectionAttemptStartTime.current;
+          console.log(`✅ ICE gathering complete (${gatheringTime}ms)`);
         }
       };
+      
       pc.onicecandidateerror = (event: any) => {
-        console.warn("⚠️ ICE candidate error:", event.errorText || event);
+        const errorCode = event.errorCode;
+        const errorText = event.errorText || "Unknown error";
+        console.warn(`⚠️ ICE candidate error [${errorCode}]: ${errorText}`);
+        
+        // If we're getting ICE errors and not in relay mode, switch to it
+        if (!forceRelayMode.current && reconnectAttempts.current === 0) {
+          console.log("🔄 ICE errors detected, will retry with relay mode if this fails");
+        }
       };
+
+      let iceGatheringComplete = false;
+      pc.onicegatheringstatechange = () => {
+        console.log("📊 ICE gathering state:", pc.iceGatheringState);
+        if (pc.iceGatheringState === "complete") {
+          iceGatheringComplete = true;
+          if (iceGatheringTimeout.current) {
+            clearTimeout(iceGatheringTimeout.current);
+            iceGatheringTimeout.current = null;
+          }
+        }
+      };
+      
+      // Set a timeout for ICE gathering (if it takes too long, the network is likely very restrictive)
+      iceGatheringTimeout.current = setTimeout(() => {
+        if (!iceGatheringComplete && pc.iceGatheringState !== "complete") {
+          console.warn("⏱️ ICE gathering taking too long - network may be very restrictive");
+          if (!forceRelayMode.current) {
+            console.log("💡 Hint: Connection will retry with relay mode if this attempt fails");
+          }
+        }
+      }, 5000);
 
       pc.oniceconnectionstatechange = () => {
         console.log("❄️ ICE connection state:", pc.iceConnectionState);
-      };
-      pc.onicecandidateerror = (event) => {
-        console.warn("⚠️ ICE candidate error:", event);
-      };
-
-      pc.oniceconnectionstatechange = () => {
-        console.log("❄️ ICE connection state:", pc.iceConnectionState);
-        if (pc.iceConnectionState === "failed") {
+        
+        if (pc.iceConnectionState === "checking") {
+          setConnectionState("Establishing connection..." + (forceRelayMode.current ? " (via relay)" : ""));
+        } else if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") {
+          const connectionTime = Date.now() - connectionAttemptStartTime.current;
+          const modeInfo = forceRelayMode.current ? " via TURN relay" : " (direct P2P)";
+          console.log(`✅ ICE connection established${modeInfo} in ${connectionTime}ms`);
+          reconnectAttempts.current = 0;
+          aggressiveMode.current = false;
+        } else if (pc.iceConnectionState === "failed") {
           if (reconnectAttempts.current < maxReconnectAttempts) {
             reconnectAttempts.current++;
-            // On second failure, enable relay-only mode for restrictive networks
-            if (reconnectAttempts.current >= 2 && !forceRelayMode.current) {
-              console.log("🔄 Enabling relay-only mode for restrictive network (mobile hotspot/NAT)");
+            
+            // Progressive fallback strategy:
+            // Attempt 1: Try normal P2P
+            // Attempt 2: Force relay mode immediately
+            // Attempt 3: Force relay + aggressive ICE gathering
+            if (reconnectAttempts.current === 1) {
+              console.log("🔄 First attempt failed, will retry with TURN relay");
               forceRelayMode.current = true;
-              setConnectionState("Retrying with relay mode...");
+              setConnectionState("Retrying with relay server...");
+            } else if (reconnectAttempts.current === 2) {
+              console.log("🔄 Second attempt failed, enabling aggressive mode");
+              aggressiveMode.current = true;
+              setConnectionState("Retrying with aggressive connection mode...");
             }
+            
             console.log(`🔄 ICE failed, restarting (attempt ${reconnectAttempts.current}/${maxReconnectAttempts})`);
-            pc.restartIce();
+            
+            // Close and recreate connection with new settings
+            setTimeout(() => {
+              if (pc.iceConnectionState === "failed") {
+                console.log("🔄 Restarting ICE with new configuration");
+                isJoining.current = false;
+                joinRoom(code);
+              }
+            }, 1000);
           } else {
             console.log("❌ Max reconnect attempts reached");
-            setConnectionState("Connection failed - Click retry");
+            setConnectionState("Connection failed after multiple attempts - Network may be too restrictive");
+            isJoining.current = false;
           }
-        } else if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") {
-          console.log("✅ ICE connection established" + (forceRelayMode.current ? " (via TURN relay)" : " (direct)"));
+        } else if (pc.iceConnectionState === "disconnected") {
+          console.log("⚠️ ICE disconnected, will auto-recover");
+          setConnectionState("Connection interrupted, recovering...");
         }
       };
 
@@ -1615,6 +1739,7 @@ export function useWebRTC() {
 
     // Reset relay mode and reconnect attempts for fresh retry
     forceRelayMode.current = false;
+    aggressiveMode.current = false;
     reconnectAttempts.current = 0;
 
     // Reset state
@@ -1625,6 +1750,38 @@ export function useWebRTC() {
     setConnectionState("Not connected");
   }, []);
 
+  // Enable relay mode for restrictive networks (call before joining room)
+  const enableRelayMode = useCallback(() => {
+    console.log("🔧 Manually enabling relay-only mode for restrictive networks");
+    forceRelayMode.current = true;
+    aggressiveMode.current = true;
+    setConnectionState("Relay mode enabled - will use TURN servers");
+  }, []);
+
+  // Get connection diagnostics
+  const getConnectionInfo = useCallback(() => {
+    const pc = peerConnectionRef.current || Array.from(peerConnectionsMap.current.values())[0];
+    
+    if (!pc) {
+      return {
+        status: "No connection",
+        usingRelay: forceRelayMode.current,
+        aggressiveMode: aggressiveMode.current,
+        attempts: reconnectAttempts.current,
+      };
+    }
+
+    return {
+      status: pc.connectionState,
+      iceState: pc.iceConnectionState,
+      iceGatheringState: pc.iceGatheringState,
+      signalingState: pc.signalingState,
+      usingRelay: forceRelayMode.current,
+      aggressiveMode: aggressiveMode.current,
+      attempts: reconnectAttempts.current,
+    };
+  }, []);
+
   return {
     createRoom,
     joinRoom,
@@ -1633,6 +1790,8 @@ export function useWebRTC() {
     requestFileDownload,
     setFileRequestHandler,
     resetConnection,
+    enableRelayMode,
+    getConnectionInfo,
     isConnected,
     connectionState,
     transferProgress,
