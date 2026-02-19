@@ -243,7 +243,7 @@ export function FileReceiver({ onBack, initialRoomCode = "" }: FileReceiverProps
                   <label htmlFor="relayMode" className="text-xs sm:text-sm cursor-pointer flex-1">
                     <span className="font-semibold text-amber-900 dark:text-amber-100">On a college/corporate network?</span>
                     <p className="text-amber-700 dark:text-amber-300 mt-0.5">
-                      Enable this if you're behind a restrictive firewall or proxy (uses relay servers for better compatibility)
+                      Enable this if you&apos;re behind a restrictive firewall or proxy (uses relay servers for better compatibility)
                     </p>
                   </label>
                 </div>
