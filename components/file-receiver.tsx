@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
-import { ArrowLeft, Download, QrCode, Loader2, CheckCircle2, AlertCircle, Wifi, FileDown, Sparkles } from "lucide-react";
+import { ArrowLeft, Download, QrCode, Loader2, CheckCircle2, AlertCircle, Wifi, FileDown, Sparkles, FolderOpen, Archive } from "lucide-react";
 import { useWebRTC } from "@/hooks/use-webrtc";
 import { QRScanner } from "@/components/qr-scanner";
 
@@ -173,6 +173,9 @@ export function FileReceiver({ onBack, initialRoomCode = "" }: FileReceiverProps
   };
 
   const progress = transferProgress;
+
+  // Detect folder transfer (ZIP sent from folder mode)
+  const isFolder = (name: string) => name.endsWith(".zip") && !name.includes(".".repeat(2));
 
   return (
     <>
@@ -345,8 +348,16 @@ export function FileReceiver({ onBack, initialRoomCode = "" }: FileReceiverProps
                     <Loader2 className="h-8 w-8 sm:h-10 sm:w-10 text-white animate-spin" />
                   </div>
                 </div>
+                {currentFileName && isFolder(currentFileName) ? (
+                  <div className="flex items-center justify-center gap-2 mb-1">
+                    <span className="inline-flex items-center gap-1.5 bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300 text-xs font-semibold px-2.5 py-1 rounded-full">
+                      <FolderOpen className="h-3.5 w-3.5" />
+                      Folder Transfer
+                    </span>
+                  </div>
+                ) : null}
                 <p className="font-bold text-xl sm:text-2xl text-blue-900 dark:text-blue-100 mb-2">
-                  Receiving File{totalFiles > 1 ? 's' : ''}...
+                  {currentFileName && isFolder(currentFileName) ? 'Receiving Folder…' : `Receiving File${totalFiles > 1 ? 's' : ''}...`}
                 </p>
                 <p className="text-sm sm:text-base text-blue-700 dark:text-blue-300 mb-1">
                   {currentFileName || 'Downloading...'}
@@ -398,7 +409,9 @@ export function FileReceiver({ onBack, initialRoomCode = "" }: FileReceiverProps
                   Download Complete!
                 </p>
                 <p className="text-sm sm:text-base text-green-700 dark:text-green-300 mb-4">
-                  File downloaded successfully
+                  {currentFileName && isFolder(currentFileName)
+                    ? 'Folder downloaded as ZIP successfully'
+                    : 'File downloaded successfully'}
                 </p>
                 <div className="bg-white/50 dark:bg-black/20 rounded-lg p-3 inline-flex items-center gap-2">
                   <CheckCircle2 className="h-4 w-4 text-green-600" />
@@ -420,10 +433,14 @@ export function FileReceiver({ onBack, initialRoomCode = "" }: FileReceiverProps
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-bold text-base sm:text-lg lg:text-xl text-emerald-900 dark:text-emerald-100 mb-1 leading-tight">
-                      ✓ {receivedFiles.length} {receivedFiles.length === 1 ? 'File' : 'Files'} Downloaded!
+                      {receivedFiles.some(f => isFolder(f.name))
+                        ? `✓ Folder Downloaded!`
+                        : `✓ ${receivedFiles.length} ${receivedFiles.length === 1 ? 'File' : 'Files'} Downloaded!`}
                     </p>
                     <p className="text-xs sm:text-sm text-emerald-700 dark:text-emerald-300">
-                      Saved to your device
+                      {receivedFiles.some(f => isFolder(f.name))
+                        ? 'Saved as ZIP — extract to restore folder structure'
+                        : 'Saved to your device'}
                     </p>
                   </div>
                 </div>
@@ -433,7 +450,9 @@ export function FileReceiver({ onBack, initialRoomCode = "" }: FileReceiverProps
                     return (
                     <div key={index} className="bg-white/60 dark:bg-black/30 rounded-lg p-3 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4">
                       <div className="flex items-center gap-3 flex-1 min-w-0 w-full sm:w-auto">
-                        <FileDown className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                        {isFolder(file.name)
+                          ? <Archive className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0" />
+                          : <FileDown className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0" />}
                         <div className="flex-1 min-w-0">
                           <p className="font-semibold text-sm break-words">{file.name}</p>
                           <p className="text-xs text-muted-foreground mt-0.5">
@@ -468,11 +487,25 @@ export function FileReceiver({ onBack, initialRoomCode = "" }: FileReceiverProps
             </Button>
             )}
 
-            <div className="bg-green-50 dark:bg-green-950/50 p-5 rounded-lg border border-green-200 dark:border-green-800">
-              <p className="text-xs sm:text-sm text-muted-foreground text-center">
-                ✓ <strong>Success:</strong> File has been saved to your Downloads folder automatically. You can close this page now.
-              </p>
-            </div>
+            {receivedFiles.some(f => isFolder(f.name)) ? (
+              <div className="bg-amber-50 dark:bg-amber-950/50 p-5 rounded-lg border border-amber-200 dark:border-amber-800">
+                <div className="flex items-start gap-3">
+                  <FolderOpen className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-semibold text-amber-900 dark:text-amber-100">Folder downloaded as ZIP</p>
+                    <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">
+                      Extract the ZIP file to restore the complete folder structure with all sub-folders and files intact.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-green-50 dark:bg-green-950/50 p-5 rounded-lg border border-green-200 dark:border-green-800">
+                <p className="text-xs sm:text-sm text-muted-foreground text-center">
+                  ✓ <strong>Success:</strong> File has been saved to your Downloads folder automatically. You can close this page now.
+                </p>
+              </div>
+            )}
           </div>
         )}
       </CardContent>

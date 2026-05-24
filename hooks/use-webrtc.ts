@@ -324,7 +324,7 @@ export function useWebRTC() {
   // Request wake lock to prevent screen sleep during transfer
   const requestWakeLock = async () => {
     try {
-      if ('wakeLock' in navigator) {
+      if ('wakeLock' in navigator && document.visibilityState === 'visible') {
         wakeLock.current = await (navigator as any).wakeLock.request('screen');
         console.log('🔆 Wake lock active - screen will stay on during transfer');
 

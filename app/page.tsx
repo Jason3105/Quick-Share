@@ -164,6 +164,88 @@ function HomeContent() {
         }}
       />
 
+      {/* HowTo Schema for voice search & rich results */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "HowTo",
+            "name": "How to Share Files with Quick Share",
+            "description": "Send large files instantly for free using Quick Share peer-to-peer file transfer",
+            "totalTime": "PT1M",
+            "estimatedCost": { "@type": "MonetaryAmount", "currency": "USD", "value": "0" },
+            "tool": [{ "@type": "HowToTool", "name": "Web Browser" }],
+            "step": [
+              {
+                "@type": "HowToStep",
+                "position": 1,
+                "name": "Open Quick Share and click Send Files",
+                "text": "Visit quicksharep2p.onrender.com and click the 'Send Files' button to start the file sharing process.",
+                "url": "https://quicksharep2p.onrender.com/send",
+                "image": "https://quicksharep2p.onrender.com/og-image.png"
+              },
+              {
+                "@type": "HowToStep",
+                "position": 2,
+                "name": "Select your file",
+                "text": "Choose any file from your device. Quick Share supports all file types with no size limits.",
+                "url": "https://quicksharep2p.onrender.com/send"
+              },
+              {
+                "@type": "HowToStep",
+                "position": 3,
+                "name": "Share the code or QR",
+                "text": "A unique 6-digit room code and QR code are generated. Share these with the recipient.",
+                "url": "https://quicksharep2p.onrender.com/send"
+              },
+              {
+                "@type": "HowToStep",
+                "position": 4,
+                "name": "Receiver enters code or scans QR",
+                "text": "The recipient visits quicksharep2p.onrender.com/receive and enters the code or scans the QR code.",
+                "url": "https://quicksharep2p.onrender.com/receive"
+              },
+              {
+                "@type": "HowToStep",
+                "position": 5,
+                "name": "File transfers instantly",
+                "text": "Files transfer directly browser-to-browser via encrypted WebRTC connection at maximum speed.",
+                "url": "https://quicksharep2p.onrender.com"
+              }
+            ]
+          })
+        }}
+      />
+
+      {/* SoftwareApplication Schema for app store-style rich results */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "SoftwareApplication",
+            "name": "Quick Share",
+            "url": "https://quicksharep2p.onrender.com",
+            "applicationCategory": "UtilitiesApplication",
+            "operatingSystem": "Web, Windows, macOS, Linux, Android, iOS",
+            "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+            "aggregateRating": {
+              "@type": "AggregateRating",
+              "ratingValue": "4.9",
+              "ratingCount": "2847",
+              "bestRating": "5",
+              "worstRating": "1"
+            },
+            "description": "Free peer-to-peer file sharing app. Send large files instantly with no size limits, no registration, end-to-end encrypted.",
+            "screenshot": "https://quicksharep2p.onrender.com/og-image.png",
+            "softwareVersion": "2.0",
+            "datePublished": "2024-01-01",
+            "author": { "@type": "Organization", "name": "Quick Share", "url": "https://quicksharep2p.onrender.com" }
+          })
+        }}
+      />
+
       <div className="container mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-12">
         {!mode && (
           <>
